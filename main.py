@@ -1,9 +1,11 @@
-from data import model
+"""Used to start the game."""
+from model import worlds
 from gui import simple_gui
-from data.control import GameControl
+from control.main import GameControl
+
 
 def main():
-    world = model.Multiverse.create_debug_world()
+    world = worlds.Multiverse.create_debug_world()
     control = GameControl(world)
     gui = simple_gui.GUI(world, control)
     gui.run()

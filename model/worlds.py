@@ -1,7 +1,7 @@
 """Defines the game world."""
-from dataclasses import dataclass, field
-
-from data.entities import PhysicalEntity, Player, Pose
+from model.entities import PhysicalEntity, Player
+from control.physics import Pose
+from model.systems.engines import TestShipEngine
 
 
 class World:
@@ -35,7 +35,9 @@ class Multiverse:
         return World(
             size=(world_width, world_height),
             entities=[
-                Player(name="The Player", pose=Pose((world_width // 2, world_height // 2))),
-                PhysicalEntity(pose=Pose((world_width // 2, 0)))
+                Player(name="The Player",
+                       pose=Pose((world_width // 2, world_height // 2)),
+                       engine=TestShipEngine()),
+                PhysicalEntity(pose=Pose((world_width // 2, world_height * 0.8)))
             ]
         )

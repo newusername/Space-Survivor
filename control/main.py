@@ -3,27 +3,18 @@
 
 import time
 
-from attr import dataclass
-
-from data.model import World
-
-
-@dataclass
-class UserInput:
-    """Contains the current user inputs. The user's inputs will be read periodically during the update loop."""
-    movement_width: float = 0
-    movement_height: float = 0
-    orientation: float = 0
+from control.user_input import UserInput
+from model.worlds import World
+from settings import GameSettings
 
 
 class GameControl:
-    def __init__(self, world: World, *, simulation_speed: float = 60):
+    def __init__(self, world: World):
         """
         :param world: The world to control.
-        :param simulation_speed: update ticks per second
         """
         self.world = world
-        self.simulation_speed = simulation_speed
+        self.simulation_speed = GameSettings.simulation_speed
 
         self.user_input = UserInput()
         self.is_running: bool = True
@@ -42,10 +33,11 @@ class GameControl:
     def simulation_tick(self):
         """Update the world."""
         self._handle_user_input()
-        # todo: update objects
-
+        for entity in self.world.entities:
+            entity.dynamics.update()
 
     def _handle_user_input(self):
         """Handles the user input that effects the world."""
-        self.world.player_entity.pose.relative_move(self.user_input.movement_width, self.user_input.movement_height)
-        self.world.player_entity.pose.orientation = self.user_input.orientation
+        dynamic = self.world.player_entity.dynamics
+        engine = self.world.player_entity.engine
+        engine.update_dynamic(dynamic, self.user_input)

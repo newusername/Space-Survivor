@@ -4,11 +4,11 @@ from dataclasses import dataclass
 import arcade
 import pygame
 import numpy as np
-from pyglet.event import EVENT_HANDLE_STATE
 
-from data.model import World
-from data.control import GameControl
-from data.entities import PhysicalEntity, Player
+from model.worlds import World
+from control.main import GameControl
+from model.entities import PhysicalEntity, Player
+from settings import GameSettings
 
 
 @dataclass(kw_only=True)
@@ -36,7 +36,7 @@ class GUI(arcade.Window):
         arcade.set_background_color(arcade.color.BLACK)
         self.camera = arcade.Camera2D()
         self.sprite_list = self.get_sprites()
-        self.joystick = self.setup_joystick()  # todo currently requires a Joystick.
+        self.joystick = self.setup_joystick()
 
         self.update_times = list()  # stores the delta_time for the last 10 update cycles to compute fps
 
@@ -53,10 +53,11 @@ class GUI(arcade.Window):
     @staticmethod
     def get_sprite_for_entity(entity: PhysicalEntity) -> arcade.Sprite:
         """Loads/ creates the assets used for entities"""
+        # todo using place holders right now
         if isinstance(entity, Player):
-            return arcade.SpriteSolidColor(60, 30, color=arcade.color.WHITE)  # todo placeholder
+            return arcade.Sprite(":resources:images/space_shooter/playerLife1_orange.png", 0.5)
         else:
-            return arcade.SpriteSolidColor(40, 40, color=arcade.color.RED)  # todo placeholder
+            return arcade.Sprite(":resources:images/space_shooter/meteorGrey_big1.png", 0.5)
 
     @staticmethod
     def setup_joystick():
@@ -73,20 +74,16 @@ class GUI(arcade.Window):
         if self.joystick is None:
             player_x, player_y = self.world.player_entity.pose.position
             relative_x, relative_y = (mouse_x - player_x), (mouse_y - player_y)
-            rotation = self._relative_position_to_angle(relative_x, relative_y)
+            rotation = self._get_point_angle(relative_x, relative_y)
             self.control.user_input.orientation = rotation
 
     @staticmethod
-    def _relative_position_to_angle(relative_x: float, relative_y: float) -> float:
-        """Get a point relative to another and return the angle to it.
+    def _get_point_angle(relative_x: float, relative_y: float) -> float:
+        """Get the clockwise angle between the point [0, 1] (up) and the given point.
 
         :returns: a value in degrees [0, 360) clockwise with 0 is up.
         """
-        if relative_y == 0:  # either looking perfectly left or right
-            rotation = 270 if relative_x < 0 else 90
-        else:
-            rotation = np.rad2deg(np.arctan2(relative_x, relative_y))
-        return rotation
+        return np.rad2deg(np.arctan2(relative_x, relative_y)) % 360
 
     def on_key_press(self, key, modifiers):
         """ Called whenever the user presses a key. """
@@ -119,27 +116,13 @@ class GUI(arcade.Window):
             self.update_times.pop(0)
         self.update_times.append(delta_time)
 
+        self._handle_joystick_inputs()
+
         # Update the world (this is only temporary, because it is much easier to implement this way.)
         num_ticks_to_execute = 1  # todo make it dependant on the passed time and self.control.simulation_speed
         for _ in range(num_ticks_to_execute):
             self.control.simulation_tick()
 
-        # Poll pygame events
-        pygame.event.pump()
-        if self.joystick:
-            # Move player
-            self.control.user_input.movement_width = self.joystick.get_axis(0)  # left stick X
-            self.control.user_input.movement_height = -self.joystick.get_axis(1)  # left stick Y (invert)
-            right_joystick_x = self.joystick.get_axis(2)
-            right_joystick_y = -self.joystick.get_axis(3)  # inverted
-            if abs(right_joystick_x) > 0.3 or abs(right_joystick_y) > 0.3:  # todo might be a bit high, but my test controller has a drift XD
-                # don't update if there is no input or only a small stick drift
-                self.control.user_input.orientation = self._relative_position_to_angle(right_joystick_x, right_joystick_y)
-
-            # Zoom with triggers
-            # zoom_change = (self.joystick.get_axis(5)) * 0.01
-            # print(self.joystick.get_axis(5), self.joystick.get_axis(4))
-            # self.settings.zoom = max(0.2, min(2.0, self.settings.zoom + zoom_change))
 
         # update the position and orientation of sprites
         self.sprite_list = self.get_sprites()
@@ -152,16 +135,57 @@ class GUI(arcade.Window):
         self.camera.position = (player_sprite.center_x, player_sprite.center_y)
         self.camera.zoom = self.settings.zoom
 
+    def _handle_joystick_inputs(self):
+        """Handle the Joystick inputs.
+
+        There is no event method like for the mouse or keyboard for joysticks. Which is why this method is called during
+        on_update().
+        """
+        if self.joystick:
+            drift_thresh = GameSettings.min_drift_strength
+            pygame.event.pump()
+            # Move player (left stick)
+            self.control.user_input.movement_width = self.suppress_activation(self.joystick.get_axis(0), drift_thresh)
+            self.control.user_input.movement_height = -self.suppress_activation(self.joystick.get_axis(1), drift_thresh)
+            r2 = self.joystick.get_axis(5) if self.joystick.get_numaxes() > 4 else self.joystick.get_button(8)
+            self.control.user_input.burst = r2  # todo Check the axes version. Is it between -1 and 1? what is not pressed?
+            if self.control.user_input.burst > 0.1:
+                self.joystick.rumble(1, 0, 1000)  # todo the test controller seems to only support on and off and only uses one motor
+            else:
+                self.joystick.stop_rumble()
+            self.control.user_input.stabilize = self.joystick.get_button(6)  # R1
+
+            # Rotation (right stick)
+            right_joystick_x = self.suppress_activation(self.joystick.get_axis(2), drift_thresh)
+            right_joystick_y = -self.suppress_activation(self.joystick.get_axis(3), drift_thresh)  # inverted
+            self.control.user_input.orientation = self._get_point_angle(right_joystick_x, right_joystick_y)
+            self.control.user_input.orientation_strength = np.sqrt(right_joystick_x**2 + right_joystick_y**2)
+
+            # Zoom
+            if self.joystick.get_button(13):  # down
+                self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 0.95))
+            elif self.joystick.get_button(12):  # up
+                self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 1.05))
+
+    @staticmethod
+    def suppress_activation(value: float, thresh: float):
+        """Reduce the value to 0 if it is smaller than the thresh. Useful e.g. to handle stick drifts..."""
+        if abs(value) >= thresh:
+            return value
+        else:
+            return 0
+
     def on_draw(self):
         self.clear()
         self.camera.use()
 
         # Draw world background
         # todo load/ create some nice stars background + a bit of twinkle. Maybe even a bit of parallex effect?
-        # arcade.draw_lbwh_rectangle_filled(0, 0, *self.world.size, arcade.color.DARK_BLUE_GRAY)
 
         # Draw sprites
         self.sprite_list.draw()
 
         # Draw UI
-        arcade.draw_text(f"fps: {1 / np.mean(self.update_times):.2f}", 10, 10, arcade.color.WHITE, 14)
+        pos = self.camera.bottom_left
+        arcade.draw_text(f"fps: {1 / np.mean(self.update_times):.2f}",
+                         pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
