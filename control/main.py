@@ -4,6 +4,7 @@
 import time
 
 from control.user_input import UserInput
+from model.entities import Combatant
 from model.worlds import World
 from settings import GameSettings
 
@@ -32,12 +33,12 @@ class GameControl:
 
     def simulation_tick(self):
         """Update the world."""
-        self._handle_user_input()
         for entity in self.world.entities:
-            entity.dynamics.update()
+            if isinstance(entity, Combatant):
+                entity.reactor.activate()
+                if entity is self.world.player_entity:
+                    entity.engine.activate(self.user_input)
+                else:
+                    pass  # todo implement logic to move NPCs
 
-    def _handle_user_input(self):
-        """Handles the user input that effects the world."""
-        dynamic = self.world.player_entity.dynamics
-        engine = self.world.player_entity.engine
-        engine.update_dynamic(dynamic, self.user_input)
+            entity.dynamics.update()  # update at the end, so that all effects during the tick are added to the dynamics

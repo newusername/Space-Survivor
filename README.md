@@ -23,22 +23,15 @@ Just follow these steps:
   - Maneuvering thrusters: much weaker, but can be directed in any direction.
 
 ## KNOWN ISSUES
-- The FPS drop over time for unknown reasons. (Even in the test world without any inputs.)
+- All good :D
 
 ## immediate todo
-- Proofread especially the doc after all this refactoring
-- commit
+- All Done :D
 
 ## TODO
 - Improve the optics
-  - add a basic ship (use some existing image)
-  - add an asteroid
   - add thruster animation for main thruster and maneuvering thrusters 
 - Improve movement system
-  - clearly separate the responsibilities of engine and dynamics
-    - the dynamics should get forces. It should not be concerned with the ships max speeds, just the global ones.
-    - The engine should figure out the forces it outputs. (And in case for stabilizing and rotating figure out what it has to do.)
-  - Clean up the experimental values for the ship. I think the system is over specified and the values override each other.
   - Allow rotation to go the longer angle, if that would be faster due to having momentum in the direction of the long angle.
 - Weapons!
 - Sound!

@@ -15,6 +15,31 @@ def rotate_vector_2d(vector: np.ndarray, angle_deg: float):
     return rot @ np.asarray(vector)
 
 
+def vector_from_angle_magnitude(angle: float, magnitude: float) -> np.ndarray:
+    """Create a vector from an angle and magnitude.
+
+    :param angle: Angle to move towards in [0, 360) clockwise with 0 is up.
+    :param magnitude: The strength of the impulse.
+    """
+    return rotate_vector_2d(np.array([0, magnitude]), angle)
+
+def angle_magnitude_from_vector(vector: np.ndarray) -> tuple[float, float]:
+    """Returns the angle and magnitude of a vector.
+
+    :return angle: Angle to move towards in [0, 360) clockwise with 0 is up.
+    :return magnitude: The strength of the impulse.
+    """
+    angle = get_point_angle(*vector)
+    magnitude = float(np.linalg.norm(vector))
+    return angle, magnitude
+
+def get_point_angle(relative_x: float, relative_y: float) -> float:
+    """Get the clockwise angle between the point [0, 1] (up) and the given point.
+
+    :returns: a value in degrees [0, 360) clockwise with 0 is up.
+    """
+    return np.rad2deg(np.arctan2(relative_x, relative_y)) % 360
+
 def limit_vector(vector: np.ndarray, max_magnitude: float) -> np.ndarray:
     """Shortens the magnitude of the vector to the max_magnitude if it is longer."""
     magnitude = np.linalg.norm(vector)

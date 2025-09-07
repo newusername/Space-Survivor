@@ -5,6 +5,7 @@ import arcade
 import pygame
 import numpy as np
 
+from control.math_utils import get_point_angle
 from model.worlds import World
 from control.main import GameControl
 from model.entities import PhysicalEntity, Player
@@ -74,16 +75,8 @@ class GUI(arcade.Window):
         if self.joystick is None:
             player_x, player_y = self.world.player_entity.pose.position
             relative_x, relative_y = (mouse_x - player_x), (mouse_y - player_y)
-            rotation = self._get_point_angle(relative_x, relative_y)
+            rotation = get_point_angle(relative_x, relative_y)
             self.control.user_input.orientation = rotation
-
-    @staticmethod
-    def _get_point_angle(relative_x: float, relative_y: float) -> float:
-        """Get the clockwise angle between the point [0, 1] (up) and the given point.
-
-        :returns: a value in degrees [0, 360) clockwise with 0 is up.
-        """
-        return np.rad2deg(np.arctan2(relative_x, relative_y)) % 360
 
     def on_key_press(self, key, modifiers):
         """ Called whenever the user presses a key. """
@@ -158,7 +151,7 @@ class GUI(arcade.Window):
             # Rotation (right stick)
             right_joystick_x = self.suppress_activation(self.joystick.get_axis(2), drift_thresh)
             right_joystick_y = -self.suppress_activation(self.joystick.get_axis(3), drift_thresh)  # inverted
-            self.control.user_input.orientation = self._get_point_angle(right_joystick_x, right_joystick_y)
+            self.control.user_input.orientation = get_point_angle(right_joystick_x, right_joystick_y)
             self.control.user_input.orientation_strength = np.sqrt(right_joystick_x**2 + right_joystick_y**2)
 
             # Zoom
@@ -186,6 +179,33 @@ class GUI(arcade.Window):
         self.sprite_list.draw()
 
         # Draw UI
+        self.draw_energy_bar()
+
+        # Draw temporary infos at the bottom
         pos = self.camera.bottom_left
-        arcade.draw_text(f"fps: {1 / np.mean(self.update_times):.2f}",
+        reactor = self.world.player_entity.reactor
+        energy = f"{reactor.capacitors_storage / reactor.capacitors_limit:.2f}"
+        arcade.draw_text(f"fps: {1 / np.mean(self.update_times):.2f} energy: {energy}",
                          pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
+
+    def draw_energy_bar(self):
+        # Calculate filled height
+        energy_fraction = self.world.player_entity.reactor.capacitors_storage / self.world.player_entity.reactor.capacitors_limit
+
+        # Interpolated color (green to red)
+        red = int(255 * (1 - energy_fraction))
+        green = int(255 * energy_fraction)
+        color = (red, green, 0)
+
+        # Draw the bar
+        bar_width = 30
+        max_bar_height = 200
+        current_height = max_bar_height * energy_fraction
+        x, y = self.camera.center_right
+        x -= bar_width
+        # Draw background (empty bar)
+        arcade.draw_lbwh_rectangle_outline(x, y, bar_width, max_bar_height, arcade.color.BLACK, 2)
+
+        # Draw filled bar (adjust y so it depletes from top to bottom)
+        filled_y = y - (max_bar_height - current_height) / 2
+        arcade.draw_lbwh_rectangle_filled(x, filled_y, bar_width, current_height, color)

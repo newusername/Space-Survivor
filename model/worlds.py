@@ -2,6 +2,7 @@
 from model.entities import PhysicalEntity, Player
 from control.physics import Pose
 from model.systems.engines import TestShipEngine
+from model.systems.reactors import TestShipReactor
 
 
 class World:
@@ -35,9 +36,8 @@ class Multiverse:
         return World(
             size=(world_width, world_height),
             entities=[
-                Player(name="The Player",
-                       pose=Pose((world_width // 2, world_height // 2)),
-                       engine=TestShipEngine()),
-                PhysicalEntity(pose=Pose((world_width // 2, world_height * 0.8)))
+                Player(name="The Player", pose=Pose((world_width // 2, world_height // 2))) \
+                    .upgrade(TestShipEngine).upgrade(TestShipReactor),
+                PhysicalEntity(initial_pose=Pose((world_width // 2, world_height * 0.8)))
             ]
         )

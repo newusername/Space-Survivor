@@ -1,128 +1,148 @@
 from abc import ABC, abstractmethod
+from typing import Iterable
 
 import numpy as np
-from numpy import iterable
-
-from control.math_utils import rotate_vector_2d, limit_vector, smallest_angle_difference
+from control.math_utils import rotate_vector_2d, limit_vector, smallest_angle_difference, vector_from_angle_magnitude
 
 from settings import GameSettings
 
 
-class Pose(ABC):
+class Pose:
     """Represents the spatial position and orientation of PhysicalEntities.
 
     :params position: 2D position of the object in the world. (width x height)
     :params orientation: 1D orientation of the object in clockwise degrees within the interval [0, 360).
     """
-    def __init__(self, position: iterable = None, orientation: float = 0):
-        self.position: np.array = np.array(position, dtype=float) if position else np.zeros((2,))
+    def __init__(self, position: Iterable = None, orientation: float = 0):
+        self.position: np.ndarray = np.array(position, dtype=float) if position else np.zeros((2,))
         assert self.position.size == 2, "position has to be 2D"
         self.orientation: float = orientation
 
+    def __repr__(self) -> str:
+        return f"Pose(width={self.position[0]}, height={self.position[1]}, orientation={self.orientation})"
 
 class Dynamics(ABC):
-    """Updates the pose over time and according to external influences."""
-    def __init__(self, pose: Pose = None, max_speed_movement: float = GameSettings.max_speed_movement,
-                 max_speed_rotation: float = GameSettings.max_speed_rotation, momentum_translation: iterable = None,
-                 momentum_rotation: float = 0):
+    """Holds all movement relevant properties of an entity. Handles the effect of external effects on the entity, such
+    as the engines or collisions. Also is used to update the entity pose when time passes.
+    """
+    def __init__(self, initial_pose: Pose = None, translation_speed_max: float = None,
+                 rotation_speed_max: float = None, initial_translation: Iterable = None,
+                 initial_rotation: float = 0):
         """
-        :param pose: The Pose that defines the initial position and orientation of the entity.
-        :param max_speed_movement: The maximum speed the entity is allowed to move.
-        :param max_speed_rotation: The maximum angle speed in degrees the entity is allowed to rotate.
-        :param momentum_translation: The initial relative movement the entity will perform during the next update.
-        :param momentum_rotation: The initial rotation momentum the entity will perform during the next update.
+        :param initial_pose: The Pose that holds the initial position and orientation of the entity.
+        :param translation_speed_max: The maximum speed the entity is allowed to move.
+        :param rotation_speed_max: The maximum angle speed in degrees the entity is allowed to rotate.
+        :param initial_translation: The initial direction and speed the entity moves.
+        :param initial_rotation: The initial speed and direction the entity rotates. (positive values mean clock-wise)
         """
-        self.pose = pose or Pose()
-        self.max_speed_movement = max_speed_movement  # todo rename to max_momentum_translation; also in the settings?
-        self.max_speed_rotation = max_speed_rotation  # todo rename to max_momentum_rotation
-        self.momentum_translation = np.array(momentum_translation, dtype=float) if momentum_translation else np.zeros((2,))
-        self.momentum_rotation = momentum_rotation
+        self.pose = initial_pose or Pose()
+        self.translation_speed_max = translation_speed_max or GameSettings.translation_speed_max
+        self.rotation_speed_max = rotation_speed_max or GameSettings.rotation_speed_max
+        self.translation_momentum = np.array(initial_translation, dtype=float) if initial_translation else np.zeros((2,))
+        self.rotation_momentum = initial_rotation
 
     @abstractmethod
     def update(self):
-        """Updates the pose over time using self.momentum."""
+        """Used to simulates the effect of self.translation and self.rotation on the object over time."""
         raise NotImplemented("abstract method")
 
     @abstractmethod
-    def relative_move(self, width: float, height: float):
-        """Gets a change in position and updates the position."""
+    def relative_move(self, angle: float, magnitude: float):
+        """Gets an impulse to move in a direction relative to the current position.
+
+        :param angle: Angle to move towards in [0, 360) clockwise with 0 is up.
+        :param magnitude: The strength of the impulse.
+        """
         raise NotImplemented("abstract method")
 
-    @abstractmethod
     def move_forward(self, magnitude: float):
-        """Moves the position in the direction of the current orientation."""
-        raise NotImplemented("abstract method")
+        """Impulse to move the entity in the direction of the current orientation by an impulse with the magnitude."""
+        self.relative_move(angle=self.pose.orientation, magnitude=magnitude)
 
     @abstractmethod
-    def relative_rotation(self, angle: float):
-        """Rotates the orientation by angle degrees. Positive numbers will rotate clockwise."""
+    def relative_rotation(self, magnitude: float):
+        """Impulse to rotate the entity.
+
+        :param magnitude: The strength of the impulse. Positive numbers will rotate clockwise.
+        """
         raise NotImplemented("abstract method")
 
-    @abstractmethod
     def absolute_rotation(self, angle: float):
-        """Turns towards the angle."""
-        raise NotImplemented("abstract method")
+        """Rotate the entity towards the angle.
 
+        Note this will not necessarily set the orientation to the angle, because the movement is still effected by the
+        rules of the simulation, e.g. the rotation_speed_max.
 
-    def set_max_speed_movement(self, max_speed: float, step_decrease: float = None):
-        """Set a new maximum speed. Optionally, if the new value is smaller than the old one, decrease only by the
-        step amount. This smoothes the movements."""
-        if step_decrease and max_speed < self.max_speed_movement:
-            max_speed = max(self.max_speed_movement - step_decrease, max_speed)
-        self.max_speed_movement = min(max_speed, GameSettings.max_speed_movement)
+        :param angle: Angle to move towards in [0, 360) clockwise with 0 is up.
+        """
+        relative_angle = smallest_angle_difference(self.pose.orientation, angle)
+        self.relative_rotation(relative_angle)
 
-    def set_max_speed_rotation(self, max_speed: float):
-        self.max_speed_rotation = min(max_speed, GameSettings.max_speed_rotation)
+    def set_translation_speed_max(self, max_speed: float, max_change: float = None):
+        """Set a new maximum speed.
 
+        :param max_speed: The new maximum allowed limit for the object
+        :param max_change: Optionally, limits how much the current max speed can change. This smoothes the movements.
+        """
+        if max_change and max_speed < self.translation_speed_max:
+            max_speed = max(self.translation_speed_max - max_change, max_speed)
+        self.translation_speed_max = min(max_speed, GameSettings.translation_speed_max)
+
+    def set_rotation_speed_max(self, max_speed: float):
+        self.rotation_speed_max = min(max_speed, GameSettings.rotation_speed_max)
 
 class StaticDynamics(Dynamics):
     """Defines an inertia free system. Meaning the object moves exactly as the inputs indicates."""
     def update(self):
         """Apply the current momentum and reset it to 0."""
-        self.pose.position += limit_vector(self.momentum_translation, self.max_speed_movement)
-        self.momentum_translation[:] = 0
+        self.pose.position += limit_vector(self.translation_momentum, self.translation_speed_max)
+        self.translation_momentum[:] = 0
 
-        if abs(self.momentum_rotation ) > self.max_speed_rotation:
-            self.momentum_rotation = np.sign(self.momentum_rotation) * self.max_speed_rotation
-        self.pose.orientation += self.momentum_rotation
+        if abs(self.rotation_momentum ) > self.rotation_speed_max:
+            self.rotation_momentum = np.sign(self.rotation_momentum) * self.rotation_speed_max
+        self.pose.orientation += self.rotation_momentum
         self.pose.orientation = self.pose.orientation % 360
-        self.momentum_rotation = 0
+        self.rotation_momentum = 0
 
-    def relative_move(self, width: float, height: float):
+    def relative_move(self, angle: float, magnitude: float):
         """Gets a change in position and updates the position."""
-        self.momentum_translation[0] += width
-        self.momentum_translation[1] += height
+        self.translation_momentum += vector_from_angle_magnitude(angle, magnitude)
 
     def move_forward(self, magnitude: float):
         """Moves the position in the direction of the current orientation."""
-        self.momentum_translation = rotate_vector_2d(np.array([0, magnitude]), self.pose.orientation)
+        self.translation_momentum = rotate_vector_2d(np.array([0, magnitude]), self.pose.orientation)
 
     def relative_rotation(self, angle: float):
         """Rotates the orientation by angle degrees. Positive numbers will rotate clockwise."""
-        self.momentum_rotation = self.pose.orientation + angle
+        self.rotation_momentum = angle
+
+    @staticmethod
+    def get_relative_rotation_magnitude(angle: float, max_rotation_acceleration: float):
+        """Returns the maximum angle to rotate to get to the target angle."""
+        if angle == 0:
+            return 0
+        else:
+            return np.sign(angle) * min(abs(angle), max_rotation_acceleration)
 
     def absolute_rotation(self, angle: float):
         """Turns towards the angle."""
-        self.momentum_rotation = angle
+        self.rotation_momentum = angle
 
 
 class InertiaDynamics(Dynamics):
     """Simulates inertia and momentum. This means that the entity keeps the current momentum and all forces applied
     to the entity change the momentum resisted by the inertia.
 
-    Note: The inertia for translation and rotation is handled separately for now, because that made finetuning
-        the parameters for having a nice steering experience easier. But this should be fixed in the future.
+    Note, this is not intended to be physically correct. The goal is a satisfying user experience and that includes
+    for me a somewhat realistic physics. Fun and user experience will take priority.
 
-    TODO: Is there a reason why I am not directly use the real equations? Instead of using this inertia variable, I
-        could use the mass, right?
-
-    :param inertia_translation: The value represents the objects resistance to changes in its positional movements.
-    :param inertia_rotation: The value represents the objects resistance to changes in its rotational movements.
+    :param initial_translation_inertia: The value represents the objects resistance to changes in its positional movements.
+    :param initial_rotation_inertia: The value represents the objects resistance to changes in its rotational movements.
     """
-    def __init__(self, inertia_translation: float = 0.05, inertia_rotation: float = 0.033, **kwargs):
+    def __init__(self, *, initial_translation_inertia: float = 0.05, initial_rotation_inertia: float = 0.033, **kwargs):
         super().__init__(**kwargs)
-        self.inertia_translation = inertia_translation
-        self.inertia_rotation = inertia_rotation
+        self.translation_inertia = initial_translation_inertia
+        self.rotation_inertia = initial_rotation_inertia
 
     def update(self):
         """Called to simulate dynamics for 1 tick."""
@@ -139,8 +159,8 @@ class InertiaDynamics(Dynamics):
             speed up and then accelerating to the right will also decrease the speed in the up direction, to keep within
             the max speed limit. This is intentional, because it felt better.
         """
-        self.momentum_translation = limit_vector(self.momentum_translation, self.max_speed_movement)
-        self.pose.position += self.momentum_translation
+        self.translation_momentum = limit_vector(self.translation_momentum, self.translation_speed_max)
+        self.pose.position += self.translation_momentum
 
     def _apply_rotation_momentum(self):
         """Apply the rotation momentum to the pose.
@@ -148,57 +168,99 @@ class InertiaDynamics(Dynamics):
         Note: This implementation is not physically correct. We assume that an object has maximum momentum. E.g. that a
             pilot would not turn faster than this threshold.
         """
-        if abs(self.momentum_rotation) > self.max_speed_rotation:
-            self.momentum_rotation = np.sign(self.momentum_rotation) * self.max_speed_rotation
-        self.pose.orientation += self.momentum_rotation
+        if abs(self.rotation_momentum) > self.rotation_speed_max:
+            self.rotation_momentum = np.sign(self.rotation_momentum) * self.rotation_speed_max
+        self.pose.orientation += self.rotation_momentum
         self.pose.orientation = self.pose.orientation % 360
+        if np.isclose(self.rotation_momentum, 0, atol=0.0001):
+            self.rotation_momentum = 0
 
-    def relative_move(self, width: float, height: float):  # todo make a vector
-        """Gets a force vector as position relative to this object and updates the momentum."""
-        self.momentum_translation += np.array([width, height]) * self.inertia_translation
-        if np.allclose(self.momentum_translation, (0, 0), atol=0.01):
+    def relative_move(self, angle: float, magnitude: float):
+        impulse = vector_from_angle_magnitude(angle, magnitude)
+        self.translation_momentum += impulse * self.translation_inertia
+        if np.allclose(self.translation_momentum, (0, 0), atol=0.01):
             # this handles the problem, that it is nearly impossible to completely stop the ship. Which is realistic,
             # but feels bad during play.
-            self.momentum_translation[:] = 0
+            self.translation_momentum[:] = 0
 
-    def move_forward(self, magnitude: float):
-        """Increases momentum in the direction of the current orientation."""
-        self.momentum_translation += rotate_vector_2d(np.array([0, magnitude]), self.pose.orientation) * self.inertia_translation
+        # todo add relative_move_vector, because that is what I got before, so I just convert twice here
 
-    def relative_rotation(self, angle: float):
-        """Rotates the orientation by angle degrees. Positive numbers will rotate clockwise."""
-        if np.allclose([angle, self.momentum_rotation], 0.01):
-            # Make it easier to completely stop. Not physically correct, but feels better.
-            self.momentum_rotation = 0
-            return
+    def relative_rotation(self, magnitude: float):
+        """Impulse to rotate the entity.
 
-        max_rotation_acceleration = 1  # todo how to pass the true value?
-        if self.momentum_rotation == 0:
-            distance_to_angle_in_ticks = np.inf
-        elif np.sign(angle) == np.sign(self.momentum_rotation):
-            distance_to_angle_in_ticks = abs(angle / self.momentum_rotation)
-        else:  # currently accelerating in the wrong direction
-            # todo it actually might be better to rotate the long way, if there is already lots of momentum in that direction
-            distance_to_angle_in_ticks = np.inf
+        :param magnitude: The strength of the impulse. Positive numbers will rotate clockwise.
+        """
+        self.rotation_momentum += magnitude * self.rotation_inertia
 
-        breaking_time_in_ticks = np.sign(angle) * self.momentum_rotation / (max_rotation_acceleration * self.inertia_rotation)
-        new_momentum = np.sign(angle) * max_rotation_acceleration * self.inertia_rotation
-        if breaking_time_in_ticks >= distance_to_angle_in_ticks:  # time to de-accelerate?
-            new_momentum *= -1
+    def get_relative_rotation_magnitude(self, angle: float, max_rotation_acceleration: float) -> float:
+        """Compute the optimal magnitude parameter needed for relative_rotation to turn by angle degrees in a
+        way to perfectly stopping at the correct angle with 0 momentum left.y
 
-        self.momentum_rotation += new_momentum
+        :param angle: Relative orientation change in degrees to move towards in [0, 360) clockwise with 0 is up.
+        :param max_rotation_acceleration: The strongest possible rotational impulse.
+        """
+        if angle == 0 and self.rotation_momentum == 0:
+            return 0  # nothing to do
 
-    def absolute_rotation(self, angle: float):
-        """Turns towards the angle."""
+        highest_possible_momentum_change = max_rotation_acceleration * self.rotation_inertia
+        target_direction = self._get_best_rotation_direction(angle, highest_possible_momentum_change)
+        new_rotation_momentum = self.rotation_momentum + highest_possible_momentum_change * target_direction
+        new_time_to_stop_in_ticks = abs(new_rotation_momentum) / highest_possible_momentum_change
+        new_breaking_distance_in_degrees = self.stopping_distance(new_rotation_momentum, new_time_to_stop_in_ticks, highest_possible_momentum_change)
+
+        if np.isclose(angle, 0, atol=0.001) and abs(self.rotation_momentum) <= highest_possible_momentum_change:
+            # when very close to the target, perfectly stop momentum and orientation
+            magnitude = -self.rotation_momentum / self.rotation_inertia
+            if angle != 0:  # todo test if that is still the case or if it is precise enough now
+                self.pose.orientation += angle
+                print("needed to correct angle")
+        elif abs(angle) <= new_breaking_distance_in_degrees:  # time to de-accelerate?
+            if abs(self.rotation_momentum) >= 1 * highest_possible_momentum_change:
+                magnitude = -1 * target_direction * max_rotation_acceleration
+            else:
+                if abs(angle) < highest_possible_momentum_change:
+                    # reduce the magnitude for the final tick to land on the target angle
+                    magnitude = (-1 * target_direction * max_rotation_acceleration * (
+                        (highest_possible_momentum_change - abs(angle)) / highest_possible_momentum_change))
+                else:
+                    magnitude = 0
+
+        else:  # accelerate momentum
+            magnitude = target_direction * max_rotation_acceleration
+
+        return magnitude
+
+    def _get_best_rotation_direction(self, target_angle: float, highest_possible_momentum_change: float) -> int:
+        """Compute the fastest direction to rotate. Naively, this is the direction with the smallest angular distance.
+         However, if there is already lots of momentum in the opposite direction, it might take more time to reverse
+         the momentum than to simply keep going.
+
+         :return: -1 for counterclockwise and 1 for clockwise. If target_angle is 0, returns the direction of the
+            current momentum.
+         """
+        if target_angle == 0:
+            return np.sign(self.rotation_momentum)
+
+        return np.sign(target_angle)  # todo implement the improved logic.
+
+    @staticmethod
+    def stopping_distance(starting_moment: float, num_ticks: float, highest_possible_momentum_change: float):
+        """The distance that is rotated before the rotation can be stopped when decelerating with
+         highest_possible_momentum_change.
+        """
+        starting_moment = abs(starting_moment)
+        return sum(starting_moment - highest_possible_momentum_change * t for t in
+                   range(int(num_ticks))) + (
+                num_ticks // 1) * highest_possible_momentum_change
+
+    def absolute_rotation(self, angle: float, max_rotation_acceleration: float = 1):
+        """Change the momentum to turn the entity towards the angle in a way to perfectly stopping at the angle with 0
+         momentum left.
+
+        :param angle: Relative orientation change in degrees to move towards in [0, 360) clockwise with 0 is up.
+        :param max_rotation_acceleration: The strongest possible rotational impulse.
+        """
         relative_angle = smallest_angle_difference(self.pose.orientation, angle)
-        self.relative_rotation(relative_angle)
-
-    def set_max_speed_movement(self, max_speed: float, step_decrease: float = None):
-        """Set a new maximum speed. Optionally, if the new value is smaller than the old one, decrease only by the
-        step amount. This smoothes the movements."""
-        step_decrease = step_decrease * self.inertia_translation if step_decrease else None
-        super().set_max_speed_movement(max_speed, step_decrease)
-
-    def set_max_speed_rotation(self, max_speed: float):
-        """Set new maximum speed for rotation."""
-        self.max_speed_rotation = min(max_speed, GameSettings.max_speed_rotation)
+        magnitude = self.get_relative_rotation_magnitude(relative_angle, max_rotation_acceleration)
+        self.relative_rotation(magnitude)
+        return magnitude
