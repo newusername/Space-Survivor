@@ -18,12 +18,7 @@ class Settings:
     screen_width: int = 800
     screen_height: int = 600
     zoom: float = 1.0
-
-
-@dataclass(kw_only=True)
-class EntityData:
-    """GUI related additional information"""
-    sprite: arcade.Sprite
+    draw_hitbox: bool = False
 
 
 class GUI(arcade.Window):
@@ -39,26 +34,29 @@ class GUI(arcade.Window):
         self.sprite_list = self.get_sprites()
         self.joystick = self.setup_joystick()
 
-        self.update_times = list()  # stores the delta_time for the last 10 update cycles to compute fps
+        arcade.enable_timings()
 
     def get_sprites(self) -> arcade.SpriteList:
-        """Returns a list with all sprites and """
-        sprite_list = arcade.SpriteList()
-        for entity in self.world.entities:
-            if entity.gui is None:
-                sprite = self.get_sprite_for_entity(entity)
-                entity.gui = EntityData(sprite=sprite)
-            sprite_list.append(entity.gui.sprite)
-        return sprite_list
+        """Returns a list with all sprites and create sprites for entities that have no sprite yet."""
+        for index, (entity, sprite) in enumerate(self.world.entities.iter_values()):
+            if sprite.properties.get("is_placeholder", False):
+                self.load_sprite_for_entity(entity)
+        return self.world.entities.sprites
 
     @staticmethod
-    def get_sprite_for_entity(entity: PhysicalEntity) -> arcade.Sprite:
+    def load_sprite_for_entity(entity: PhysicalEntity):
         """Loads/ creates the assets used for entities"""
         # todo using place holders right now
         if isinstance(entity, Player):
-            return arcade.Sprite(":resources:images/space_shooter/playerLife1_orange.png", 0.5)
+            texture = arcade.load_texture(":resources:images/space_shooter/playerLife1_orange.png",
+                                          hit_box_algorithm=arcade.hitbox.algo_detailed)
+            entity.sprite.texture = texture
+            entity.sprite.scale = (0.5, 0.5)
         else:
-            return arcade.Sprite(":resources:images/space_shooter/meteorGrey_big1.png", 0.5)
+            texture = arcade.load_texture(":resources:images/space_shooter/meteorGrey_big1.png",
+                                          hit_box_algorithm=arcade.hitbox.algo_detailed)
+            entity.sprite.texture = texture
+            entity.sprite.scale = (0.5, 0.5)
 
     @staticmethod
     def setup_joystick():
@@ -73,7 +71,7 @@ class GUI(arcade.Window):
     def on_mouse_motion(self, mouse_x, mouse_y, dx, dy):
         """Happens approximately 60 times per second."""
         if self.joystick is None:
-            player_x, player_y = self.world.player_entity.pose.position
+            player_x, player_y = self.world.entities.player.pose.position
             relative_x, relative_y = (mouse_x - player_x), (mouse_y - player_y)
             rotation = get_point_angle(relative_x, relative_y)
             self.control.user_input.orientation = rotation
@@ -91,6 +89,8 @@ class GUI(arcade.Window):
                 self.control.user_input.movement_height = -1
             case arcade.key.ESCAPE:
                 self.close()
+            case arcade.key.H:
+                Settings.draw_hitbox = not Settings.draw_hitbox
 
     def on_key_release(self, key, modifiers):
         """Called when the user releases a key. """
@@ -105,10 +105,6 @@ class GUI(arcade.Window):
                 self.control.user_input.movement_height = 0
 
     def on_update(self, delta_time: float = None):
-        if len(self.update_times) >= 10:
-            self.update_times.pop(0)
-        self.update_times.append(delta_time)
-
         self._handle_joystick_inputs()
 
         # Update the world (this is only temporary, because it is much easier to implement this way.)
@@ -118,13 +114,12 @@ class GUI(arcade.Window):
 
 
         # update the position and orientation of sprites
-        self.sprite_list = self.get_sprites()
-        for entity, sprite in zip(self.world.entities, self.sprite_list):
+        for entity, sprite in self.world.entities.iter_values():
             sprite.center_x, sprite.center_y = entity.pose.position
             sprite.angle = entity.pose.orientation
 
         # Update camera
-        player_sprite: arcade.Sprite = self.world.player_entity.gui.sprite
+        player_sprite: arcade.Sprite = self.world.entities.player.sprite
         self.camera.position = (player_sprite.center_x, player_sprite.center_y)
         self.camera.zoom = self.settings.zoom
 
@@ -177,20 +172,23 @@ class GUI(arcade.Window):
 
         # Draw sprites
         self.sprite_list.draw()
+        if Settings.draw_hitbox:
+            for sprite in self.sprite_list:
+                sprite.draw_hit_box(color=arcade.color.LIME_GREEN, line_thickness=2)
 
         # Draw UI
         self.draw_energy_bar()
 
         # Draw temporary infos at the bottom
         pos = self.camera.bottom_left
-        reactor = self.world.player_entity.reactor
+        reactor = self.world.entities.player.reactor
         energy = f"{reactor.capacitors_storage / reactor.capacitors_limit:.2f}"
-        arcade.draw_text(f"fps: {1 / np.mean(self.update_times):.2f} energy: {energy}",
+        arcade.draw_text(f"fps: {arcade.get_fps(60):.2f} energy: {energy}",
                          pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
 
     def draw_energy_bar(self):
         # Calculate filled height
-        energy_fraction = self.world.player_entity.reactor.capacitors_storage / self.world.player_entity.reactor.capacitors_limit
+        energy_fraction = self.world.entities.player.reactor.capacitors_storage / self.world.entities.player.reactor.capacitors_limit
 
         # Interpolated color (green to red)
         red = int(255 * (1 - energy_fraction))

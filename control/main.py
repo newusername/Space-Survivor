@@ -36,9 +36,12 @@ class GameControl:
         for entity in self.world.entities:
             if isinstance(entity, Combatant):
                 entity.reactor.activate()
-                if entity is self.world.player_entity:
-                    entity.engine.activate(self.user_input)
+                if entity is self.world.entities.player:
+                    entity.engine.activate(self.user_input)  # noqa does not recognice the check for Combatant
                 else:
                     pass  # todo implement logic to move NPCs
 
             entity.dynamics.update()  # update at the end, so that all effects during the tick are added to the dynamics
+
+        for collision in self.world.entities.get_collisions():
+            print(collision)  # todo have some real consequences :D
