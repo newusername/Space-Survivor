@@ -29,12 +29,21 @@ Just follow these steps:
 - All Done :D
 
 ## TODO
+- Separating GUI from Control is no longer a good idea, because I chose to use arcade as Engine to handle control tasks. Dublicating everything seems like a massive performance waste,
 - Improve the optics
   - add thruster animation for main thruster and maneuvering thrusters 
 - Improve movement system
   - Allow rotation to go the longer angle, if that would be faster due to having momentum in the direction of the long angle.
+- Physics:
+  - use the Chipmunk Physics Engine instead. Its basically what I wanted in better ^^'
+  - But needs testing how computationally heavy it is.
+  - ALso can I salvage my auto rotation? :(
 - Weapons!
 - Sound!
 - Upgrade System
 - Implement a more general Input system that does not rely on my setup.
 - Write a proper ReadMe
+
+## Ideas
+- Minigame Astroid Swarm: Simply a throw a bunch of Stuff at the player who has to dodge.
+- Minigame Astroid Mining: The player has to hold a fixed relative position over a moving/ spinning asteroid to employ mining equipment. The reward are some resources.

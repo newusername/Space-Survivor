@@ -8,7 +8,6 @@ import numpy as np
 from control.math_utils import get_point_angle
 from model.worlds import World
 from control.main import GameControl
-from model.entities import PhysicalEntity, Player
 from settings import GameSettings
 
 
@@ -31,32 +30,10 @@ class GUI(arcade.Window):
 
         arcade.set_background_color(arcade.color.BLACK)
         self.camera = arcade.Camera2D()
-        self.sprite_list = self.get_sprites()
+        self.sprite_list = self.world.entities.sprites
         self.joystick = self.setup_joystick()
 
         arcade.enable_timings()
-
-    def get_sprites(self) -> arcade.SpriteList:
-        """Returns a list with all sprites and create sprites for entities that have no sprite yet."""
-        for index, (entity, sprite) in enumerate(self.world.entities.iter_values()):
-            if sprite.properties.get("is_placeholder", False):
-                self.load_sprite_for_entity(entity)
-        return self.world.entities.sprites
-
-    @staticmethod
-    def load_sprite_for_entity(entity: PhysicalEntity):
-        """Loads/ creates the assets used for entities"""
-        # todo using place holders right now
-        if isinstance(entity, Player):
-            texture = arcade.load_texture(":resources:images/space_shooter/playerLife1_orange.png",
-                                          hit_box_algorithm=arcade.hitbox.algo_detailed)
-            entity.sprite.texture = texture
-            entity.sprite.scale = (0.5, 0.5)
-        else:
-            texture = arcade.load_texture(":resources:images/space_shooter/meteorGrey_big1.png",
-                                          hit_box_algorithm=arcade.hitbox.algo_detailed)
-            entity.sprite.texture = texture
-            entity.sprite.scale = (0.5, 0.5)
 
     @staticmethod
     def setup_joystick():
@@ -115,8 +92,13 @@ class GUI(arcade.Window):
 
         # update the position and orientation of sprites
         for entity, sprite in self.world.entities.iter_values():
-            sprite.center_x, sprite.center_y = entity.pose.position
+            sprite.position = tuple(entity.pose.position)
             sprite.angle = entity.pose.orientation
+
+        # handle other events
+        if self.control.gui_info.player_damage:
+            self.joystick.rumble(1, 0, 1000)
+            self.control.gui_info.player_damage = False
 
         # Update camera
         player_sprite: arcade.Sprite = self.world.entities.player.sprite
@@ -181,9 +163,8 @@ class GUI(arcade.Window):
 
         # Draw temporary infos at the bottom
         pos = self.camera.bottom_left
-        reactor = self.world.entities.player.reactor
-        energy = f"{reactor.capacitors_storage / reactor.capacitors_limit:.2f}"
-        arcade.draw_text(f"fps: {arcade.get_fps(60):.2f} energy: {energy}",
+        arcade.draw_text(f"fps: {arcade.get_fps(60):.2f}, #entities: {len(self.sprite_list)}, "
+                         f"pos: {self.world.entities.player.pose}",
                          pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
 
     def draw_energy_bar(self):

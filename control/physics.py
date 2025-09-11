@@ -19,7 +19,7 @@ class Pose:
         self.orientation: float = orientation
 
     def __repr__(self) -> str:
-        return f"Pose(width={self.position[0]}, height={self.position[1]}, orientation={self.orientation})"
+        return f"Pose(width={self.position[0]:.1f}, height={self.position[1]:.1f}, orientation={self.orientation:.1f})"
 
 class Dynamics(ABC):
     """Holds all movement relevant properties of an entity. Handles the effect of external effects on the entity, such
@@ -38,7 +38,10 @@ class Dynamics(ABC):
         self.pose = initial_pose or Pose()
         self.translation_speed_max = translation_speed_max or GameSettings.translation_speed_max
         self.rotation_speed_max = rotation_speed_max or GameSettings.rotation_speed_max
-        self.translation_momentum = np.array(initial_translation, dtype=float) if initial_translation else np.zeros((2,))
+        if initial_translation is None:
+            self.translation_momentum = np.zeros((2,))
+        else:
+            self.translation_momentum = np.array(initial_translation, dtype=float)
         self.rotation_momentum = initial_rotation
 
     @abstractmethod
@@ -91,22 +94,71 @@ class Dynamics(ABC):
     def set_rotation_speed_max(self, max_speed: float):
         self.rotation_speed_max = min(max_speed, GameSettings.rotation_speed_max)
 
+    @staticmethod
+    def collision(dynamics1: "Dynamics", weight1: float, dynamics2: "Dynamics", weight2: float, e=1.0):
+        """Simulates the effects of the object colliding with another object."""
+        """Compute post-collision velocities of two 2D spherical bodies.
+
+        e : float, optional (default=1.0)
+        Coefficient of restitution (1=elastic, 0=perfectly inelastic).
+
+        This is just a test. Code based on ChatGPT output.
+        """
+        v1 = dynamics1.translation_momentum
+        v2 = dynamics2.translation_momentum
+        p1 = dynamics1.pose.position
+        p2 = dynamics2.pose.position
+
+        # Compute the unit normal from p1 to p2
+        n = p2 - p1
+        n_norm = np.linalg.norm(n)
+        if n_norm == 0:
+            raise ValueError("Collision normal undefined (positions coincide)")
+        n = n / n_norm
+
+        # Relative velocity along the normal
+        v_rel = np.dot(v1 - v2, n)
+
+        if v_rel > 0:  # If they are separating, no collision response
+            # Impulse scalar
+            J = -(1 + e) * v_rel / (1 / weight1 + 1 / weight2)
+
+            # Apply impulse to velocities
+            v1_prime = v1 + (J / weight1) * n
+            v2_prime = v2 - (J / weight2) * n
+
+            dynamics1.translation_momentum = v1_prime
+            dynamics2.translation_momentum = v2_prime
+
+
+class ImmovableDynamics(Dynamics):
+    """Dynamics that do not change the entity at all. E.g. useful for world border."""
+    def relative_rotation(self, magnitude: float):
+        """No updates, because we do not want changes."""
+
+    def relative_move(self, angle: float, magnitude: float):
+        """No updates, because we do not want changes."""
+
+    def update(self):
+        """No updates, because we do not want changes."""
+
+
 class StaticDynamics(Dynamics):
     """Defines an inertia free system. Meaning the object moves exactly as the inputs indicates."""
     def update(self):
         """Apply the current momentum and reset it to 0."""
         self.pose.position += limit_vector(self.translation_momentum, self.translation_speed_max)
-        self.translation_momentum[:] = 0
+        # self.translation_momentum[:] = 0
 
-        if abs(self.rotation_momentum ) > self.rotation_speed_max:
+        if abs(self.rotation_momentum) > self.rotation_speed_max:
             self.rotation_momentum = np.sign(self.rotation_momentum) * self.rotation_speed_max
         self.pose.orientation += self.rotation_momentum
         self.pose.orientation = self.pose.orientation % 360
-        self.rotation_momentum = 0
+        # self.rotation_momentum = 0
 
     def relative_move(self, angle: float, magnitude: float):
         """Gets a change in position and updates the position."""
-        self.translation_momentum += vector_from_angle_magnitude(angle, magnitude)
+        self.translation_momentum = vector_from_angle_magnitude(angle, magnitude)
 
     def move_forward(self, magnitude: float):
         """Moves the position in the direction of the current orientation."""
@@ -124,9 +176,23 @@ class StaticDynamics(Dynamics):
         else:
             return np.sign(angle) * min(abs(angle), max_rotation_acceleration)
 
-    def absolute_rotation(self, angle: float):
+    def absolute_rotation(self, angle: float, max_rotation_acceleration: float = None):
         """Turns towards the angle."""
-        self.rotation_momentum = angle
+        momentum_change = angle - self.pose.orientation
+        if abs(momentum_change) > max_rotation_acceleration:
+            momentum_change = np.sign(momentum_change) * max_rotation_acceleration
+        self.rotation_momentum = momentum_change
+
+    def collision(self, weight1: float, dynamics2: "Dynamics", weight2: float, e=1.0):
+        """Simulates the effects of the object colliding with another object."""
+        """Compute post-collision velocities of two 2D spherical bodies.
+
+        e : float, optional (default=1.0)
+        Coefficient of restitution (1=elastic, 0=perfectly inelastic).
+
+        This is just a test. Code based on ChatGPT output.
+        """
+
 
 
 class InertiaDynamics(Dynamics):
