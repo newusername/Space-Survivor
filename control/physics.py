@@ -1,313 +1,136 @@
-from abc import ABC, abstractmethod
-from typing import Iterable
-
 import numpy as np
-from control.math_utils import rotate_vector_2d, limit_vector, smallest_angle_difference, vector_from_angle_magnitude
+from arcade import PymunkPhysicsEngine
+from pymunk import Vec2d
+
+from control.math_utils import smallest_angle_difference, vector_from_angle_magnitude, rotate_vector_2d
 
 from settings import GameSettings
+import model
 
 
-class Pose:
-    """Represents the spatial position and orientation of PhysicalEntities.
-
-    :params position: 2D position of the object in the world. (width x height)
-    :params orientation: 1D orientation of the object in clockwise degrees within the interval [0, 360).
-    """
-    def __init__(self, position: Iterable = None, orientation: float = 0):
-        self.position: np.ndarray = np.array(position, dtype=float) if position else np.zeros((2,))
-        assert self.position.size == 2, "position has to be 2D"
-        self.orientation: float = orientation
-
-    def __repr__(self) -> str:
-        return f"Pose(width={self.position[0]:.1f}, height={self.position[1]:.1f}, orientation={self.orientation:.1f})"
-
-class Dynamics(ABC):
+class PhysicsEngine(PymunkPhysicsEngine):
     """Holds all movement relevant properties of an entity. Handles the effect of external effects on the entity, such
     as the engines or collisions. Also is used to update the entity pose when time passes.
     """
-    def __init__(self, initial_pose: Pose = None, translation_speed_max: float = None,
-                 rotation_speed_max: float = None, initial_translation: Iterable = None,
-                 initial_rotation: float = 0):
-        """
-        :param initial_pose: The Pose that holds the initial position and orientation of the entity.
-        :param translation_speed_max: The maximum speed the entity is allowed to move.
-        :param rotation_speed_max: The maximum angle speed in degrees the entity is allowed to rotate.
-        :param initial_translation: The initial direction and speed the entity moves.
-        :param initial_rotation: The initial speed and direction the entity rotates. (positive values mean clock-wise)
-        """
-        self.pose = initial_pose or Pose()
-        self.translation_speed_max = translation_speed_max or GameSettings.translation_speed_max
-        self.rotation_speed_max = rotation_speed_max or GameSettings.rotation_speed_max
-        if initial_translation is None:
-            self.translation_momentum = np.zeros((2,))
-        else:
-            self.translation_momentum = np.array(initial_translation, dtype=float)
-        self.rotation_momentum = initial_rotation
+    def __init__(self, gravity=(0, 0), damping: float = 1.0):
+        super().__init__(gravity=gravity, damping=damping)
+        self.entity = None
+        self.physics_object = None
 
-    @abstractmethod
-    def update(self):
-        """Used to simulates the effect of self.translation and self.rotation on the object over time."""
-        raise NotImplemented("abstract method")
+    def set_current_entity(self, entity: "model.entities.PhysicalEntity"):
+        """Set a specific entity to be manipulated."""  # todo make this a context manager.
+        self.entity = entity
+        self.physics_object = self.get_physics_object(entity)
 
-    @abstractmethod
+    def get_translational_speed(self) -> Vec2d:
+        """Return the translational speed vector of the entity."""
+        return self.physics_object.body.velocity
+
+    def get_velocity(self) -> float:
+        """Return the translational speed of the entity."""
+        return self.get_translational_speed().length
+
+    def set_translational_speed(self, velocity: tuple[float, float]):
+        """Set the translational speed of the entity."""
+        self.physics_object.body.velocity = velocity
+
+    def get_rotational_speed(self) -> float:
+        """Return the rotational speed of the entity. Positive numbers will rotate clockwise.
+
+        Note that Pymunk uses the opposite orientation. Hence, the - in the code below.
+        """
+        return -self.physics_object.body.angular_velocity
+
+    def set_rotational_speed(self, velocity: float):
+        """Set the rotational speed of the entity. Positive numbers will rotate clockwise.
+
+        Note that Pymunk uses the opposite orientation. Hence, the - in the code below.
+        """
+        self.physics_object.body.angular_velocity = -velocity
+
     def relative_move(self, angle: float, magnitude: float):
-        """Gets an impulse to move in a direction relative to the current position.
+        """Move in a direction relative to the current position with.
 
-        :param angle: Angle to move towards in [0, 360) clockwise with 0 is up.
-        :param magnitude: The strength of the impulse.
+         :param angle: Angle to move towards in [0, 360) clockwise with 0 is up.
+         :param magnitude: The strength of the impulse.
+         """
+        impulse = vector_from_angle_magnitude(angle, magnitude)
+        self.relative_move_impulse(impulse)
+
+    def relative_move_impulse(self, impulse: np.ndarray):
+        """Gets an impulse to move in a direction relative to the current position, but global orientation.
+
+        Pymunk's apply_impulse() also applies the impuls based on the entities orientation, which is why we rotate it
+        before.
         """
-        raise NotImplemented("abstract method")
+        pymunk_impulse = rotate_vector_2d(impulse, -self.entity.angle)
+        self.apply_impulse(self.entity, tuple(pymunk_impulse))  # noqa
+        if np.allclose(self.get_translational_speed(), (0, 0), atol=0.01):
+            # this handles the problem, that it is nearly impossible to completely stop the ship. Which is realistic,
+            # but feels bad during play.
+            self.set_translational_speed((0, 0))
 
     def move_forward(self, magnitude: float):
         """Impulse to move the entity in the direction of the current orientation by an impulse with the magnitude."""
-        self.relative_move(angle=self.pose.orientation, magnitude=magnitude)
-
-    @abstractmethod
-    def relative_rotation(self, magnitude: float):
-        """Impulse to rotate the entity.
-
-        :param magnitude: The strength of the impulse. Positive numbers will rotate clockwise.
-        """
-        raise NotImplemented("abstract method")
-
-    def absolute_rotation(self, angle: float):
-        """Rotate the entity towards the angle.
-
-        Note this will not necessarily set the orientation to the angle, because the movement is still effected by the
-        rules of the simulation, e.g. the rotation_speed_max.
-
-        :param angle: Angle to move towards in [0, 360) clockwise with 0 is up.
-        """
-        relative_angle = smallest_angle_difference(self.pose.orientation, angle)
-        self.relative_rotation(relative_angle)
-
-    def set_translation_speed_max(self, max_speed: float, max_change: float = None):
-        """Set a new maximum speed.
-
-        :param max_speed: The new maximum allowed limit for the object
-        :param max_change: Optionally, limits how much the current max speed can change. This smoothes the movements.
-        """
-        if max_change and max_speed < self.translation_speed_max:
-            max_speed = max(self.translation_speed_max - max_change, max_speed)
-        self.translation_speed_max = min(max_speed, GameSettings.translation_speed_max)
-
-    def set_rotation_speed_max(self, max_speed: float):
-        self.rotation_speed_max = min(max_speed, GameSettings.rotation_speed_max)
-
-    @staticmethod
-    def collision(dynamics1: "Dynamics", weight1: float, dynamics2: "Dynamics", weight2: float, e=1.0):
-        """Simulates the effects of the object colliding with another object."""
-        """Compute post-collision velocities of two 2D spherical bodies.
-
-        e : float, optional (default=1.0)
-        Coefficient of restitution (1=elastic, 0=perfectly inelastic).
-
-        This is just a test. Code based on ChatGPT output.
-        """
-        v1 = dynamics1.translation_momentum
-        v2 = dynamics2.translation_momentum
-        p1 = dynamics1.pose.position
-        p2 = dynamics2.pose.position
-
-        # Compute the unit normal from p1 to p2
-        n = p2 - p1
-        n_norm = np.linalg.norm(n)
-        if n_norm == 0:
-            raise ValueError("Collision normal undefined (positions coincide)")
-        n = n / n_norm
-
-        # Relative velocity along the normal
-        v_rel = np.dot(v1 - v2, n)
-
-        if v_rel > 0:  # If they are separating, no collision response
-            # Impulse scalar
-            J = -(1 + e) * v_rel / (1 / weight1 + 1 / weight2)
-
-            # Apply impulse to velocities
-            v1_prime = v1 + (J / weight1) * n
-            v2_prime = v2 - (J / weight2) * n
-
-            dynamics1.translation_momentum = v1_prime
-            dynamics2.translation_momentum = v2_prime
-
-
-class ImmovableDynamics(Dynamics):
-    """Dynamics that do not change the entity at all. E.g. useful for world border."""
-    def relative_rotation(self, magnitude: float):
-        """No updates, because we do not want changes."""
-
-    def relative_move(self, angle: float, magnitude: float):
-        """No updates, because we do not want changes."""
-
-    def update(self):
-        """No updates, because we do not want changes."""
-
-
-class StaticDynamics(Dynamics):
-    """Defines an inertia free system. Meaning the object moves exactly as the inputs indicates."""
-    def update(self):
-        """Apply the current momentum and reset it to 0."""
-        self.pose.position += limit_vector(self.translation_momentum, self.translation_speed_max)
-        # self.translation_momentum[:] = 0
-
-        if abs(self.rotation_momentum) > self.rotation_speed_max:
-            self.rotation_momentum = np.sign(self.rotation_momentum) * self.rotation_speed_max
-        self.pose.orientation += self.rotation_momentum
-        self.pose.orientation = self.pose.orientation % 360
-        # self.rotation_momentum = 0
-
-    def relative_move(self, angle: float, magnitude: float):
-        """Gets a change in position and updates the position."""
-        self.translation_momentum = vector_from_angle_magnitude(angle, magnitude)
-
-    def move_forward(self, magnitude: float):
-        """Moves the position in the direction of the current orientation."""
-        self.translation_momentum = rotate_vector_2d(np.array([0, magnitude]), self.pose.orientation)
-
-    def relative_rotation(self, angle: float):
-        """Rotates the orientation by angle degrees. Positive numbers will rotate clockwise."""
-        self.rotation_momentum = angle
-
-    @staticmethod
-    def get_relative_rotation_magnitude(angle: float, max_rotation_acceleration: float):
-        """Returns the maximum angle to rotate to get to the target angle."""
-        if angle == 0:
-            return 0
-        else:
-            return np.sign(angle) * min(abs(angle), max_rotation_acceleration)
-
-    def absolute_rotation(self, angle: float, max_rotation_acceleration: float = None):
-        """Turns towards the angle."""
-        momentum_change = angle - self.pose.orientation
-        if abs(momentum_change) > max_rotation_acceleration:
-            momentum_change = np.sign(momentum_change) * max_rotation_acceleration
-        self.rotation_momentum = momentum_change
-
-    def collision(self, weight1: float, dynamics2: "Dynamics", weight2: float, e=1.0):
-        """Simulates the effects of the object colliding with another object."""
-        """Compute post-collision velocities of two 2D spherical bodies.
-
-        e : float, optional (default=1.0)
-        Coefficient of restitution (1=elastic, 0=perfectly inelastic).
-
-        This is just a test. Code based on ChatGPT output.
-        """
-
-
-
-class InertiaDynamics(Dynamics):
-    """Simulates inertia and momentum. This means that the entity keeps the current momentum and all forces applied
-    to the entity change the momentum resisted by the inertia.
-
-    Note, this is not intended to be physically correct. The goal is a satisfying user experience and that includes
-    for me a somewhat realistic physics. Fun and user experience will take priority.
-
-    :param initial_translation_inertia: The value represents the objects resistance to changes in its positional movements.
-    :param initial_rotation_inertia: The value represents the objects resistance to changes in its rotational movements.
-    """
-    def __init__(self, *, initial_translation_inertia: float = 0.05, initial_rotation_inertia: float = 0.033, **kwargs):
-        super().__init__(**kwargs)
-        self.translation_inertia = initial_translation_inertia
-        self.rotation_inertia = initial_rotation_inertia
-
-    def update(self):
-        """Called to simulate dynamics for 1 tick."""
-        self._apply_translation_momentum()
-        self._apply_rotation_momentum()
-
-    def _apply_translation_momentum(self):
-        """Apply the translation momentum to the pose.
-
-        Note: This implementation is not physically correct. We assume that an object has maximum momentum. E.g. that a
-            pilot would not accelerate over a certain speed to avoid loosing control of the ship. The thrusters would
-            turn off automatically in this case. However, this comes with the side effect, that the current
-            implementation cancels the momentum over time when accelerating in another direction. E.g. when moving top
-            speed up and then accelerating to the right will also decrease the speed in the up direction, to keep within
-            the max speed limit. This is intentional, because it felt better.
-        """
-        self.translation_momentum = limit_vector(self.translation_momentum, self.translation_speed_max)
-        self.pose.position += self.translation_momentum
-
-    def _apply_rotation_momentum(self):
-        """Apply the rotation momentum to the pose.
-
-        Note: This implementation is not physically correct. We assume that an object has maximum momentum. E.g. that a
-            pilot would not turn faster than this threshold.
-        """
-        if abs(self.rotation_momentum) > self.rotation_speed_max:
-            self.rotation_momentum = np.sign(self.rotation_momentum) * self.rotation_speed_max
-        self.pose.orientation += self.rotation_momentum
-        self.pose.orientation = self.pose.orientation % 360
-        if np.isclose(self.rotation_momentum, 0, atol=0.0001):
-            self.rotation_momentum = 0
-
-    def relative_move(self, angle: float, magnitude: float):
-        impulse = vector_from_angle_magnitude(angle, magnitude)
-        self.translation_momentum += impulse * self.translation_inertia
-        if np.allclose(self.translation_momentum, (0, 0), atol=0.01):
-            # this handles the problem, that it is nearly impossible to completely stop the ship. Which is realistic,
-            # but feels bad during play.
-            self.translation_momentum[:] = 0
-
-        # todo add relative_move_vector, because that is what I got before, so I just convert twice here
+        self.relative_move(angle=self.entity.angle, magnitude=magnitude)
 
     def relative_rotation(self, magnitude: float):
         """Impulse to rotate the entity.
 
         :param magnitude: The strength of the impulse. Positive numbers will rotate clockwise.
         """
-        self.rotation_momentum += magnitude * self.rotation_inertia
+        self.set_rotational_speed(self.get_rotational_speed() + magnitude * self.entity.rotation_inertia)
 
     def get_relative_rotation_magnitude(self, angle: float, max_rotation_acceleration: float) -> float:
         """Compute the optimal magnitude parameter needed for relative_rotation to turn by angle degrees in a
         way to perfectly stopping at the correct angle with 0 momentum left.y
 
-        :param angle: Relative orientation change in degrees to move towards in [0, 360) clockwise with 0 is up.
+        :param angle: Relative orientation change in degrees to move towards in [-180, 180) with 0 meaning no change,
+            positive values clockwise rotation and negative counterclockwise rotation.
         :param max_rotation_acceleration: The strongest possible rotational impulse.
         """
-        if angle == 0 and self.rotation_momentum == 0:
+        assert -180 <= angle < 180, "angle has to be in the interval [-180, 180)"
+        if angle == 0 and self.get_rotational_speed() == 0:
             return 0  # nothing to do
 
-        highest_possible_momentum_change = max_rotation_acceleration * self.rotation_inertia
-        target_direction = self._get_best_rotation_direction(angle, highest_possible_momentum_change)
-        new_rotation_momentum = self.rotation_momentum + highest_possible_momentum_change * target_direction
+        highest_possible_momentum_change = max_rotation_acceleration * self.entity.rotation_inertia
+        new_rotation_momentum = self.get_rotational_speed() + highest_possible_momentum_change * np.sign(self.get_rotational_speed())
         new_time_to_stop_in_ticks = abs(new_rotation_momentum) / highest_possible_momentum_change
         new_breaking_distance_in_degrees = self.stopping_distance(new_rotation_momentum, new_time_to_stop_in_ticks, highest_possible_momentum_change)
 
-        if np.isclose(angle, 0, atol=0.001) and abs(self.rotation_momentum) <= highest_possible_momentum_change:
+        if np.isclose(angle, 0, atol=0.001) and abs(self.get_rotational_speed()) <= highest_possible_momentum_change:
             # when very close to the target, perfectly stop momentum and orientation
-            magnitude = -self.rotation_momentum / self.rotation_inertia
-            if angle != 0:  # todo test if that is still the case or if it is precise enough now
-                self.pose.orientation += angle
-                print("needed to correct angle")
+            magnitude = -self.get_rotational_speed() / self.entity.rotation_inertia  # todo is that still correct with Pymunk?
+            if angle != 0:
+                self.entity.angle += angle
         elif abs(angle) <= new_breaking_distance_in_degrees:  # time to de-accelerate?
-            if abs(self.rotation_momentum) >= 1 * highest_possible_momentum_change:
-                magnitude = -1 * target_direction * max_rotation_acceleration
+            if abs(self.get_rotational_speed()) >= 1 * highest_possible_momentum_change:
+                magnitude = -1 * np.sign(self.get_rotational_speed()) * max_rotation_acceleration
             else:
                 if abs(angle) < highest_possible_momentum_change:
                     # reduce the magnitude for the final tick to land on the target angle
-                    magnitude = (-1 * target_direction * max_rotation_acceleration * (
+                    magnitude = (-1 * np.sign(self.get_rotational_speed()) * max_rotation_acceleration * (
                         (highest_possible_momentum_change - abs(angle)) / highest_possible_momentum_change))
                 else:
                     magnitude = 0
 
         else:  # accelerate momentum
-            magnitude = target_direction * max_rotation_acceleration
+            magnitude = self._get_best_rotation_direction(angle) * max_rotation_acceleration
 
         return magnitude
 
-    def _get_best_rotation_direction(self, target_angle: float, highest_possible_momentum_change: float) -> int:
+    def _get_best_rotation_direction(self, target_angle: float) -> int:
         """Compute the fastest direction to rotate. Naively, this is the direction with the smallest angular distance.
          However, if there is already lots of momentum in the opposite direction, it might take more time to reverse
          the momentum than to simply keep going.
 
          :return: -1 for counterclockwise and 1 for clockwise. If target_angle is 0, returns the direction of the
-            current momentum.
+            current rotation speed.
          """
         if target_angle == 0:
-            return np.sign(self.rotation_momentum)
+            return np.sign(self.get_rotational_speed())
 
-        return np.sign(target_angle)  # todo implement the improved logic.
+        return np.sign(target_angle)
 
     @staticmethod
     def stopping_distance(starting_moment: float, num_ticks: float, highest_possible_momentum_change: float):
@@ -317,7 +140,7 @@ class InertiaDynamics(Dynamics):
         starting_moment = abs(starting_moment)
         return sum(starting_moment - highest_possible_momentum_change * t for t in
                    range(int(num_ticks))) + (
-                num_ticks // 1) * highest_possible_momentum_change
+                num_ticks % 1) * highest_possible_momentum_change
 
     def absolute_rotation(self, angle: float, max_rotation_acceleration: float = 1):
         """Change the momentum to turn the entity towards the angle in a way to perfectly stopping at the angle with 0
@@ -326,7 +149,14 @@ class InertiaDynamics(Dynamics):
         :param angle: Relative orientation change in degrees to move towards in [0, 360) clockwise with 0 is up.
         :param max_rotation_acceleration: The strongest possible rotational impulse.
         """
-        relative_angle = smallest_angle_difference(self.pose.orientation, angle)
+        relative_angle = smallest_angle_difference(self.entity.angle, angle)
         magnitude = self.get_relative_rotation_magnitude(relative_angle, max_rotation_acceleration)
         self.relative_rotation(magnitude)
         return magnitude
+
+    def set_rotational_inertia(self, value: float):  # todo I am a bit confused. Pymunk makes it sound like this is only inertia, but going deeper it looks like both
+        # self.physics_object.body._set_moment(value)
+        self.physics_object.body.moment = value
+
+    def get_rotational_inertia(self) -> float:  # todo I am a bit confused. Pymunk makes it sound like this is only inertia, but going deeper it looks like both
+        return self.physics_object.body.moment

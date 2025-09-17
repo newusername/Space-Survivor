@@ -1,11 +1,11 @@
 """Contains the objects."""
-from typing import Self, Iterable, Iterator
+from typing import Self
 
 import numpy as np
 import arcade
-from arcade import SpriteList, Sprite
+from arcade import Sprite, SpriteList, PymunkPhysicsEngine
+from numpy.random import randint
 
-from control.physics import Pose, Dynamics, InertiaDynamics, StaticDynamics
 from model.systems.common import System
 from model.systems.engines import Engine
 from model.systems.reactors import Reactor
@@ -15,121 +15,143 @@ from model.systems.weapons import WeaponSystems
 from settings import GameSettings
 
 
-class PhysicalEntity:
-    """Base class for all interactive objects that should be rendered.
+def get_class_name(cls: type) -> str:
+    """Return the name of the class."""
+    return cls.__name__
 
-    :param initial_pose: Represents the position and orientation of the object.
-    :param dynamics: Defines how the pose is updated.
-    :param sprite: The sprite representing the entity in the GUI. But is also used for collision detection.
-    """
-    def __init__(self, *, initial_pose: Pose = None, dynamics: Dynamics = None, sprite: Sprite = None):
-        self.pose = initial_pose or Pose()
-        if dynamics is None:
-            dynamics = InertiaDynamics if GameSettings.player_dynamic == "inertia" else StaticDynamics
-            dynamics = dynamics(initial_pose=initial_pose)
-        self.dynamics = dynamics
-        if sprite:
-            self.sprite = sprite
-        else:
-            sprite = Sprite()
-            sprite.properties["is_placeholder"] = True
-            self.sprite = sprite
-        self.sprite.properties["entity"] = self
 
-    def collision(self):
-        """Is called when the entity is involved in a collision."""
+class PhysicalEntity(Sprite):
+    """Base class for all interactive objects that should be rendered."""
+    def __init__(self, mass: float = 1., rotation_inertia: float = None,
+                 max_velocity: float = GameSettings.translation_speed_max,
+                 elasticity: float = None, *args, **kwargs):
+        """
+        :param rotation_inertia: If None, it is computed by the Physics Engine
+        :param elasticity: todo Not quite sure what the default is set to when left None, lets test it out!
+        """
+        super().__init__(*args, **kwargs)
+        self.mass = mass
+        self.rotation_inertia = rotation_inertia
+        self.friction: float = 0.2
+        self.elasticity = elasticity
+        self.body_type: int = PymunkPhysicsEngine.DYNAMIC
+        self.damping: float | None = None
+        self.gravity: tuple[float, float] | None = None
+        self.max_velocity = max_velocity
+        self.max_horizontal_velocity: int | None = None
+        self.max_vertical_velocity: int | None = None
+        self.radius: float = 0
+        self.collision_type: str | None = type(self).__name__
 
-class EntityList:
-    """Holds all Entities and provides functionality for their interactions."""
-    def __init__(self, entities: list[PhysicalEntity]=None):
-        self.entities: list = []
-        self.sprites = SpriteList(use_spatial_hash=True)
-
-        self.add_entities(entities or [])
-        self._player = None
-
-    def __iter__(self) -> Iterator[PhysicalEntity]:
-        """Iter over all entities."""
-        return iter(self.entities)
-
-    def iter_values(self) -> Iterator[tuple[PhysicalEntity, Sprite]]:
-        """Iter over all pairs of entity and the corresponding sprite."""
-        return iter(zip(self.entities, self.sprites))
+    def get_physics(self) -> dict:
+        """Returns all parameters needed by the physics engine in a neat dictionary."""
+        return {
+            "mass": self.mass,
+            "moment_of_inertia": self.rotation_inertia,
+            "friction": self.friction,
+            "elasticity": self.elasticity,
+            "body_type": self.body_type,
+            "damping": self.damping,
+            "gravity": self.gravity,
+            "max_velocity": self.max_velocity,
+            "max_horizontal_velocity": self.max_horizontal_velocity,
+            "max_vertical_velocity": self.max_vertical_velocity,
+            "radius": self.radius,
+            "collision_type": self.collision_type
+        }
 
     @property
-    def player(self) -> "Combatant | None":
-        """Return the Entity representing the player."""
-        if self._player:
-            return self._player
-        else:
-            for entity in self.entities:
-                if isinstance(entity, Player):
-                    self._player = entity
-                    return entity
-        return None
+    def angle(self) -> float:
+        """Get or set the rotation or the sprite.
 
-    def add_entity(self, entity: PhysicalEntity):
-        """Adds a new entity to the world."""
-        self.add_entities([entity])
-
-    def add_entities(self, entities: Iterable[PhysicalEntity]):
-        """Add multiple entities."""
-        self.entities.extend(entities)
-        sprites = [entity.sprite for entity in entities]
-        self.sprites.extend(sprites)
-
-    def remove_entity(self, entity: PhysicalEntity):
-        """Removes the entity the sprite belongs to."""
-        index = self.entities.index(entity)
-        self.entities.pop(index)
-        self.sprites.pop(index)
-
-    def get_collisions(self) -> list[tuple[Sprite, Sprite]]:
-        """Returns all entity collisions.
-
-        Internally this uses a 2-step approach. It first tests for sprites with overlapping hitboxes and for those it
-        checks the polygonal hit boxes.
+        The value is in degrees and is clockwise.
         """
-        collision_pairs = []
-        for sprite in self.sprites:
-            collided = arcade.check_for_collision_with_list(sprite, self.sprites)
-            for other in collided:
-                if sprite is not other:
-                    # Store as sorted tuple to avoid duplicates (A,B) == (B,A)
-                    pair = tuple(sorted((sprite, other), key=id))
-                    collision_pairs.append(pair)
+        return self._angle
 
-        # Remove duplicates
-        collision_pairs = list(set(collision_pairs))
-        return collision_pairs
+    @angle.setter
+    def angle(self, new_value: float) -> None:
+        """Added functionality of limiting the nagle to [0, 360)"""
+        new_value = new_value % 360
+        if new_value == self._angle:
+            return
+
+        self._angle = new_value
+        self._hit_box.angle = new_value
+
+        for sprite_list in self.sprite_lists:
+            sprite_list._update_angle(self)
+
+        self.update_spatial_hash()
 
 
-class Border(PhysicalEntity):
-    """World border."""
+class WorldBorder:
+    """Helps to create Sprite at the edge of the map that nothing can pass and signals to the player that there is
+    nothing more to explore in this direction."""
+    name: str = "WorldBorder"
+    @classmethod
+    def create_world_border(cls, world_size: tuple[int, int], wall_color = arcade.color.GRAY) -> SpriteList:
+        """Create boxes that frame the entire simulated world. Currently, this is just 4 colored boxes.
+
+        :param world_size: The size of the entire simulated world.
+        :param wall_color: The color of the border.
+        """
+        width, height = world_size
+        thickness = 10
+        walls = arcade.SpriteList()
+        walls.extend([
+            arcade.SpriteSolidColor(width + thickness, thickness, width / 2, -thickness / 2, wall_color),  # bottom
+            arcade.SpriteSolidColor(width + thickness, thickness, width / 2, height + thickness / 2, wall_color),  # top
+            arcade.SpriteSolidColor(thickness, height, -thickness / 2, height / 2, wall_color),  # left
+            arcade.SpriteSolidColor(thickness, height, width + thickness / 2, height / 2, wall_color),  # right
+        ])
+        return walls
+
+    @staticmethod
+    def get_physics() -> dict:
+        """Returns all parameters needed by the physics engine in a neat dictionary."""
+        return {
+            "mass": 1,
+            "moment_of_inertia": PymunkPhysicsEngine.MOMENT_INF,
+            "friction": 0,
+            "elasticity": 0,
+            "body_type": PymunkPhysicsEngine.STATIC,
+            "damping": None,
+            "gravity": None,
+            "max_velocity": None,
+            "max_horizontal_velocity": None,
+            "max_vertical_velocity": None,
+            "radius": 0,
+            "collision_type": "WorldBorder"
+        }
 
 
 class Asteroid(PhysicalEntity):
     """A simple peace of rock floating through space."""
-    def __init__(self, initial_pose: Pose = None, size: str = None, sprite: Sprite=None, *args, **kwargs):
+    size_to_default_mass = {
+        "tiny": 0.1,
+        "small": 1.,
+        "med": 3.,
+        "big": 10.0
+    }
+    def __init__(self, size: str = "random", scale: float = 1., *args, **kwargs):
         """Create a random sized asteroid if no sprite is given."""
-        if sprite is None:
-            if size is None:
-                size = np.random.choice(["tiny", "small", "med", "big"])
-            number = np.random.randint(1, (4 if size == "large" else 2) + 1)
-            x, y = initial_pose.position
-            angle = initial_pose.orientation
-            texture = arcade.load_texture(f":resources:images/space_shooter/meteorGrey_{size}{number}.png",
-                                          hit_box_algorithm=arcade.hitbox.algo_detailed)
-            sprite = Sprite(texture, center_x=x, center_y=y, angle=angle, scale=(np.random.random((2,)) + 0.5),
-                            hit_box_algorithm=arcade.hitbox.algo_detailed)
-        super().__init__(initial_pose=initial_pose, sprite=sprite, *args, **kwargs)
+        if size == "random":
+            size = np.random.choice(["tiny", "small", "med", "big"])
+        image_number = np.random.randint(1, (4 if size == "large" else 2) + 1)
+        texture = arcade.load_texture(f":resources:images/space_shooter/meteorGrey_{size}{image_number}.png",
+                                      hit_box_algorithm=arcade.hitbox.algo_detailed)
+        scale = 1  # scale or np.random.random((2,)) + 0.5
+        mass = self.size_to_default_mass[size] * scale**3
+        # todo set some asteroid specific physics parameters
+
+        super().__init__(path_or_texture=texture, scale=scale, mass=mass, *args, **kwargs)
 
 
 class Combatant(PhysicalEntity):
     """Represents all objects that partake in battle."""
-    def __init__(self, initial_pose: Pose = None, dynamics: Dynamics = None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """Create the most basic combatant. Use the upgrade() function to customize it."""
-        super().__init__(initial_pose=initial_pose, dynamics=dynamics, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.reactor = Reactor(entity=self)
         self.engine = Engine(entity=self)
         self.structure = Structure(entity=self)
@@ -158,14 +180,8 @@ class Combatant(PhysicalEntity):
 
 class Player(Combatant):
     """Represents the player's avatar in the world."""
-    def __init__(self, sprite: Sprite = None, name: str = "Player", *args, **kwargs):
+    def __init__(self, name: str = "Player", *args, **kwargs):
         texture = arcade.load_texture(":resources:images/space_shooter/playerShip1_blue.png",
                                       hit_box_algorithm=arcade.hitbox.algo_detailed)
-        sprite = sprite or Sprite(texture)
-        super().__init__(sprite=sprite, *args, **kwargs)
-        sprite.center_x, sprite.center_y = self.pose.position[0], self.pose.position[1]
-        self.name = name
-
-    def collision(self):
-        """Is called when the entity is involved in a collision."""
-        print("Player Collision detected!")
+        super().__init__(path_or_texture=texture, *args, **kwargs)
+        self.player_name = name

@@ -1,49 +1,36 @@
-Unnamed project (name pending)
+Space Survivor - Very early stage...
 ==============================
 
-This is a WIP.
+You are just a tiny ship in an environment full of perils. Survive!
 
 ## What is this game?
 - short introduction to what the game is about + some screenshots?
 Sections coming soon :D:
 
 ## How to install?
-
-Just follow these steps:
-1. Clone the repo: **TODO add link**
+I recommend to clone this repository and use uv to install the required packages.
+Follow these steps:
+1. Clone the repo: `git clone https://github.com/newusername/Space-Survivor.git`
 2. Navigate into the top level directory of the cloned  repository.
 3. Open a terminal and run `uv sync`. (Only the first time or after updating.)
 4. Then start the game with `uv run main.py`.
 
 ## Game Manual
 
+Currently, there is only a minigame available which is more of a tech demo testing the physics engine.
+
+Your goal is simple, dodge the asteroids and don't get squashed! (Well there is no damage yet, so have fun pushing asteroids instead if you like :D)
+
 ### Controls
+Moving:
 - There are two types of drives. 
-  - Main thruster: powerful, but can only move straight ahead
-  - Maneuvering thrusters: much weaker, but can be directed in any direction.
+  - Main thruster: powerful, but can only move straight ahead (R2)
+  - Maneuvering thrusters: much weaker, but can be directed in any direction. (Left stick for moving and right stick for rotating.)
+- Your ships board computer can take over to stabilize the ship and stop both rotation and movement using the maneuvering thrusters. (R1)
+
+Misc:
+- Press the sticks to zoom in or out.
 
 ## KNOWN ISSUES
-- All good :D
+- all done :D
 
-## immediate todo
-- All Done :D
-
-## TODO
-- Separating GUI from Control is no longer a good idea, because I chose to use arcade as Engine to handle control tasks. Dublicating everything seems like a massive performance waste,
-- Improve the optics
-  - add thruster animation for main thruster and maneuvering thrusters 
-- Improve movement system
-  - Allow rotation to go the longer angle, if that would be faster due to having momentum in the direction of the long angle.
-- Physics:
-  - use the Chipmunk Physics Engine instead. Its basically what I wanted in better ^^'
-  - But needs testing how computationally heavy it is.
-  - ALso can I salvage my auto rotation? :(
-- Weapons!
-- Sound!
-- Upgrade System
-- Implement a more general Input system that does not rely on my setup.
-- Write a proper ReadMe
-
-## Ideas
-- Minigame Astroid Swarm: Simply a throw a bunch of Stuff at the player who has to dodge.
-- Minigame Astroid Mining: The player has to hold a fixed relative position over a moving/ spinning asteroid to employ mining equipment. The reward are some resources.

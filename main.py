@@ -5,7 +5,8 @@ from control.main import GameControl
 
 
 def main():
-    world = worlds.Multiverse.create_debug_world()
+    # world = worlds.Multiverse.create_debug_world()
+    world = worlds.Multiverse.asteroid_shower()
     control = GameControl(world)
     gui = simple_gui.GUI(world, control)
     gui.run()

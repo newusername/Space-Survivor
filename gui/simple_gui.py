@@ -1,9 +1,11 @@
 """A simple GUI for testing using Arcade for rendering and Pygame for input."""
 from dataclasses import dataclass
+from typing import Optional
 
 import arcade
 import pygame
 import numpy as np
+from pygame.joystick import JoystickType
 
 from control.math_utils import get_point_angle
 from model.worlds import World
@@ -16,7 +18,7 @@ class Settings:
     """Has the GUI settings."""
     screen_width: int = 800
     screen_height: int = 600
-    zoom: float = 1.0
+    zoom: float = 0.8
     draw_hitbox: bool = False
 
 
@@ -30,13 +32,13 @@ class GUI(arcade.Window):
 
         arcade.set_background_color(arcade.color.BLACK)
         self.camera = arcade.Camera2D()
-        self.sprite_list = self.world.entities.sprites
+        self.sprite_list = self.world.entities
         self.joystick = self.setup_joystick()
 
         arcade.enable_timings()
 
     @staticmethod
-    def setup_joystick():
+    def setup_joystick() -> Optional[JoystickType]:
         """Init pygame joystick."""
         pygame.init()
         pygame.joystick.init()
@@ -44,17 +46,13 @@ class GUI(arcade.Window):
             joystick = pygame.joystick.Joystick(0)
             joystick.init()
             return joystick
-
-    def on_mouse_motion(self, mouse_x, mouse_y, dx, dy):
-        """Happens approximately 60 times per second."""
-        if self.joystick is None:
-            player_x, player_y = self.world.entities.player.pose.position
-            relative_x, relative_y = (mouse_x - player_x), (mouse_y - player_y)
-            rotation = get_point_angle(relative_x, relative_y)
-            self.control.user_input.orientation = rotation
+        return None
 
     def on_key_press(self, key, modifiers):
-        """ Called whenever the user presses a key. """
+        """ Called whenever the user presses a key.
+
+        Note: steering only works when no joystick is active, as that will override the keyboard input.
+        """
         match key:
             case arcade.key.LEFT | arcade.key.A:
                 self.control.user_input.movement_width = -1
@@ -64,6 +62,12 @@ class GUI(arcade.Window):
                 self.control.user_input.movement_height = 1
             case arcade.key.DOWN | arcade.key.S:
                 self.control.user_input.movement_height = -1
+            case arcade.key.Q:
+                self.control.user_input.orientation = (self.world.player.angle - 179) % 360
+                self.control.user_input.orientation_strength = 1
+            case arcade.key.E:
+                self.control.user_input.orientation = (self.world.player.angle + 179) % 360
+                self.control.user_input.orientation_strength = 1
             case arcade.key.ESCAPE:
                 self.close()
             case arcade.key.H:
@@ -80,8 +84,18 @@ class GUI(arcade.Window):
                 self.control.user_input.movement_height = 0
             case arcade.key.DOWN | arcade.key.S:
                 self.control.user_input.movement_height = 0
+            case arcade.key.Q:
+                self.control.user_input.orientation = 0
+                self.control.user_input.orientation_strength = 0
+            case arcade.key.E:
+                self.control.user_input.orientation = 0
+                self.control.user_input.orientation_strength = 0
 
     def on_update(self, delta_time: float = None):
+        """Notes:
+
+        The sprites are automatically synced with the model by arcades Pymunk wrapper for the physics engine.
+        """
         self._handle_joystick_inputs()
 
         # Update the world (this is only temporary, because it is much easier to implement this way.)
@@ -89,19 +103,13 @@ class GUI(arcade.Window):
         for _ in range(num_ticks_to_execute):
             self.control.simulation_tick()
 
-
-        # update the position and orientation of sprites
-        for entity, sprite in self.world.entities.iter_values():
-            sprite.position = tuple(entity.pose.position)
-            sprite.angle = entity.pose.orientation
-
         # handle other events
         if self.control.gui_info.player_damage:
             self.joystick.rumble(1, 0, 1000)
             self.control.gui_info.player_damage = False
 
         # Update camera
-        player_sprite: arcade.Sprite = self.world.entities.player.sprite
+        player_sprite: arcade.Sprite = self.world.player
         self.camera.position = (player_sprite.center_x, player_sprite.center_y)
         self.camera.zoom = self.settings.zoom
 
@@ -157,34 +165,32 @@ class GUI(arcade.Window):
         if Settings.draw_hitbox:
             for sprite in self.sprite_list:
                 sprite.draw_hit_box(color=arcade.color.LIME_GREEN, line_thickness=2)
+        # Draw world borders
+        self.world.walls.draw()
 
         # Draw UI
         self.draw_energy_bar()
 
         # Draw temporary infos at the bottom
         pos = self.camera.bottom_left
+        player = self.world.player
         arcade.draw_text(f"fps: {arcade.get_fps(60):.2f}, #entities: {len(self.sprite_list)}, "
-                         f"pos: {self.world.entities.player.pose}",
+                         f"Pose(x={player.center_x:.1f}, y={player.center_y:.1f}, orientation={player.angle:.1f}°),"
+                         f" speed {player.physics_engines[0].get_velocity():.1f}",
                          pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
 
     def draw_energy_bar(self):
-        # Calculate filled height
-        energy_fraction = self.world.entities.player.reactor.capacitors_storage / self.world.entities.player.reactor.capacitors_limit
+        """Adds a simple depleted bar to the right side of the GUI indicating the current power level."""
+        energy_fraction = self.world.player.reactor.capacitors_storage / self.world.player.reactor.capacitors_limit
 
-        # Interpolated color (green to red)
         red = int(255 * (1 - energy_fraction))
         green = int(255 * energy_fraction)
         color = (red, green, 0)
 
-        # Draw the bar
         bar_width = 30
         max_bar_height = 200
         current_height = max_bar_height * energy_fraction
         x, y = self.camera.center_right
         x -= bar_width
-        # Draw background (empty bar)
         arcade.draw_lbwh_rectangle_outline(x, y, bar_width, max_bar_height, arcade.color.BLACK, 2)
-
-        # Draw filled bar (adjust y so it depletes from top to bottom)
-        filled_y = y - (max_bar_height - current_height) / 2
-        arcade.draw_lbwh_rectangle_filled(x, filled_y, bar_width, current_height, color)
+        arcade.draw_lbwh_rectangle_filled(x, y, bar_width, current_height, color)

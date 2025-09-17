@@ -12,7 +12,7 @@ class UserInput:
     :param movement_width: Value in [-1, 1] indicating the height direction and power the ship should move
     :param burst: Value in [0, 1] indicating if the main thruster should be activated and its power level.
     :param stabilize: Signals the autopilot to fire the maneuvering thrusters to kill the momentum.
-    :param orientation: The players orientation input in degrees with 0 facing up.
+    :param orientation: The direction the players wants to move in degrees with 0 is up in [0, 360)
     :param orientation_strength: Value in [0, 1] How strong the rotation is pressed.
     """
     movement_width: float = 0
