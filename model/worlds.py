@@ -3,11 +3,13 @@ import time
 
 from numpy.random import random
 from arcade import SpriteList, Sprite
+from pymunk import Arbiter, Space
 
 from control.physics import PhysicsEngine
 from model.entities import Player, Asteroid, WorldBorder, get_class_name
 from model.systems.engines import TestShipEngine
 from model.systems.reactors import TestShipReactor
+from model.systems.structures import TestShipChassis
 
 
 class World:
@@ -41,7 +43,7 @@ class World:
                                                   begin_handler=self._collision_handler_border_asteroid)
 
     @staticmethod
-    def _collision_handler_border_asteroid(border_sprite: Sprite, asteroid_sprite: Sprite, _arbiter, _space, _data):
+    def _collision_handler_border_asteroid(_border_sprite: Sprite, asteroid_sprite: Sprite, _arbiter, _space, _data):
         """Called when Asteroids collide with the world border."""
         asteroid_sprite.remove_from_sprite_lists()
         return False
@@ -82,6 +84,18 @@ class AstroidShowerWorld(World):
             self.physics_engine.set_velocity(asteroid, initial_speed)
             self.physics_engine.set_rotation(asteroid, random() * 0.5)
 
+    def set_default_collision_handlers(self):
+        """Show impact for player collisions with asteroids."""
+        super().set_default_collision_handlers()
+        self.physics_engine.add_collision_handler(get_class_name(Player), get_class_name(Asteroid),
+                                                  post_handler=self._collision_handler_player_asteroid)
+
+    @staticmethod
+    def _collision_handler_player_asteroid(player_sprite: Player, _asteroid_sprite: Sprite, arbiter: Arbiter,
+                                           _space: Space, _data: dict):
+        """Called when Players collides with the Asteroids."""
+        player_sprite.structure.impact(arbiter.total_ke)
+
 
 class Multiverse:
     """Library of existing worlds and tools to generate them."""
@@ -108,6 +122,6 @@ class Multiverse:
         world_height = 600
 
         player = (Player(name="The Player", center_x=world_width // 2, center_y=world_height // 2)
-                  .upgrade(TestShipEngine).upgrade(TestShipReactor))
+                  .upgrade(TestShipEngine).upgrade(TestShipReactor).upgrade(TestShipChassis))
         world = AstroidShowerWorld(size=(world_width, world_height), player=player, num_asteroids=10)
         return world

@@ -10,7 +10,7 @@ from model.systems.common import System
 from model.systems.engines import Engine
 from model.systems.reactors import Reactor
 from model.systems.sensors import Sensor
-from model.systems.structures import Structure
+from model.systems.structures import TestShipChassis, Structure
 from model.systems.weapons import WeaponSystems
 from settings import GameSettings
 
@@ -83,6 +83,10 @@ class PhysicalEntity(Sprite):
 
         self.update_spatial_hash()
 
+    def destroy(self):
+        """Is called when the object is destroyed."""
+        self.remove_from_sprite_lists()
+
 
 class WorldBorder:
     """Helps to create Sprite at the edge of the map that nothing can pass and signals to the player that there is
@@ -133,16 +137,15 @@ class Asteroid(PhysicalEntity):
         "med": 3.,
         "big": 10.0
     }
-    def __init__(self, size: str = "random", scale: float = 1., *args, **kwargs):
+    def __init__(self, size: str = "random", scale: float = None, *args, **kwargs):
         """Create a random sized asteroid if no sprite is given."""
         if size == "random":
             size = np.random.choice(["tiny", "small", "med", "big"])
         image_number = np.random.randint(1, (4 if size == "large" else 2) + 1)
         texture = arcade.load_texture(f":resources:images/space_shooter/meteorGrey_{size}{image_number}.png",
                                       hit_box_algorithm=arcade.hitbox.algo_detailed)
-        scale = 1  # scale or np.random.random((2,)) + 0.5
-        mass = self.size_to_default_mass[size] * scale**3
-        # todo set some asteroid specific physics parameters
+        scale = scale or np.random.random((2,)) + 0.5
+        mass = self.size_to_default_mass[size] * np.linalg.norm(scale)**3
 
         super().__init__(path_or_texture=texture, scale=scale, mass=mass, *args, **kwargs)
 
@@ -166,7 +169,7 @@ class Combatant(PhysicalEntity):
             self.reactor = system_object
         elif issubclass(system, Engine):
             self.engine = system_object
-        elif issubclass(system, Structure):
+        elif issubclass(system, TestShipChassis):
             self.structure = system_object
         elif issubclass(system, WeaponSystems):
             self.weapons = system_object
@@ -185,3 +188,7 @@ class Player(Combatant):
                                       hit_box_algorithm=arcade.hitbox.algo_detailed)
         super().__init__(path_or_texture=texture, *args, **kwargs)
         self.player_name = name
+
+    def destroy(self):
+        """Players are currently not allowed to die, because the GUI needs a player at all times at the moment."""
+        print("You died.")

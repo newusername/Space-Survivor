@@ -19,7 +19,7 @@ Follow these steps:
 
 Currently, there is only a minigame available which is more of a tech demo testing the physics engine.
 
-Your goal is simple, dodge the asteroids and don't get squashed! (Well there is no damage yet, so have fun pushing asteroids instead if you like :D)
+Your goal is simple, dodge the asteroids and don't get squashed!
 
 ### Controls
 Moving:

@@ -14,6 +14,7 @@ class UserInput:
     :param stabilize: Signals the autopilot to fire the maneuvering thrusters to kill the momentum.
     :param orientation: The direction the players wants to move in degrees with 0 is up in [0, 360)
     :param orientation_strength: Value in [0, 1] How strong the rotation is pressed.
+    :param respawn: If True, the player respawns with full health.
     """
     movement_width: float = 0
     movement_height: float = 0
@@ -21,4 +22,5 @@ class UserInput:
     stabilize: bool = False
     orientation: float = 0
     orientation_strength: float = 0
+    respawn: bool = False
 

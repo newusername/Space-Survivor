@@ -70,6 +70,8 @@ class GUI(arcade.Window):
                 self.control.user_input.orientation_strength = 1
             case arcade.key.ESCAPE:
                 self.close()
+            case arcade.key.R:
+                self.control.user_input.respawn = True
             case arcade.key.H:
                 Settings.draw_hitbox = not Settings.draw_hitbox
 
@@ -99,7 +101,7 @@ class GUI(arcade.Window):
         self._handle_joystick_inputs()
 
         # Update the world (this is only temporary, because it is much easier to implement this way.)
-        num_ticks_to_execute = 1  # todo make it dependant on the passed time and self.control.simulation_speed
+        num_ticks_to_execute = 1
         for _ in range(num_ticks_to_execute):
             self.control.simulation_tick()
 
@@ -170,6 +172,9 @@ class GUI(arcade.Window):
 
         # Draw UI
         self.draw_energy_bar()
+        self.draw_hp_bar()
+        if self.world.player.structure.hp == 0:
+            self.print_game_over()
 
         # Draw temporary infos at the bottom
         pos = self.camera.bottom_left
@@ -180,17 +185,34 @@ class GUI(arcade.Window):
                          pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
 
     def draw_energy_bar(self):
-        """Adds a simple depleted bar to the right side of the GUI indicating the current power level."""
+        """Show the current power level."""
         energy_fraction = self.world.player.reactor.capacitors_storage / self.world.player.reactor.capacitors_limit
-
-        red = int(255 * (1 - energy_fraction))
-        green = int(255 * energy_fraction)
-        color = (red, green, 0)
-
         bar_width = 30
         max_bar_height = 200
-        current_height = max_bar_height * energy_fraction
         x, y = self.camera.center_right
         x -= bar_width
-        arcade.draw_lbwh_rectangle_outline(x, y, bar_width, max_bar_height, arcade.color.BLACK, 2)
-        arcade.draw_lbwh_rectangle_filled(x, y, bar_width, current_height, color)
+        self.draw_bar(x, y, bar_width, max_bar_height, arcade.color.YELLOW, energy_fraction)
+
+    def draw_hp_bar(self):
+        """Show the current hp level."""
+        energy_fraction = self.world.player.structure.hp / self.world.player.structure.max_hp
+        bar_width = 30
+        max_bar_height = 200
+        x, y = self.camera.center_right
+        x -= bar_width * 2
+        self.draw_bar(x, y, bar_width, max_bar_height, arcade.color.GREEN, energy_fraction)
+
+    @staticmethod
+    def draw_bar(left: float, bottom: float, bar_width: float, max_bar_height: float, color: tuple[int, int, int],
+                 fraction: float = 1.):
+        """Adds a simple depleted bar to the GUI."""
+        current_height = max_bar_height * fraction
+        arcade.draw_lbwh_rectangle_outline(left, bottom, bar_width, max_bar_height, arcade.color.BLACK, 2)
+        arcade.draw_lbwh_rectangle_filled(left, bottom, bar_width, current_height, color)
+
+    def print_game_over(self):
+        """Print the Game Over overlay."""
+        x, y = self.camera.position
+        # todo add like a grey transparent image all over the camera area
+        # arcade.draw_text(f"Game Over!", x, y, arcade.color.WHITE, 200, anchor_x="center")
+        arcade.draw_text(f"Press 'r' to respawn", x, y, arcade.color.WHITE, 60, anchor_x="center")

@@ -41,11 +41,22 @@ class GameControl:
 
     def simulation_tick(self):
         """Update the world."""
+        self._handle_non_game_user_input()
         self.world.world_update()
         for entity in self.world.entities:
             if isinstance(entity, Combatant):
+                if entity.structure.hp == 0:
+                    entity.destroy()
+                    continue
                 entity.reactor.activate()
+                entity.structure.activate()
                 if entity is self.world.player:
                     entity.engine.activate(self.user_input)  # noqa does not recognice the check for Combatant
                 else:
                     pass  # todo implement logic to move NPCs
+
+    def _handle_non_game_user_input(self):
+        """React to non-game related user input such as opening menus."""
+        if self.user_input.respawn:
+            self.user_input.respawn = False
+            self.world.player.structure.hp = self.world.player.structure.max_hp
