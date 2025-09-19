@@ -1,36 +1,39 @@
 """Contains the objects."""
-from typing import Self
+from typing import Self, Final
 
 import numpy as np
 import arcade
 from arcade import Sprite, SpriteList, PymunkPhysicsEngine
-from numpy.random import randint
 
+from control import math_utils
 from model.systems.common import System
 from model.systems.engines import Engine
 from model.systems.reactors import Reactor
 from model.systems.sensors import Sensor
-from model.systems.structures import TestShipChassis, Structure
+from model.systems.shields import Shields
+from model.systems.structures import Structure
 from model.systems.weapons import WeaponSystems
 from settings import GameSettings
 
 
-def get_class_name(cls: type) -> str:
-    """Return the name of the class."""
-    return cls.__name__
+MATERIAL_WEIGHT: Final[dict] = {  # average weight of 1m³ of material in kg
+    "rock": 2700.,
+    "steel": 7800.
+}
 
 
 class PhysicalEntity(Sprite):
     """Base class for all interactive objects that should be rendered."""
-    def __init__(self, mass: float = 1., rotation_inertia: float = None,
+    def __init__(self, mass: float | str = 1., rotation_inertia: float = None,
                  max_velocity: float = GameSettings.translation_speed_max,
                  elasticity: float = None, *args, **kwargs):
         """
+        :param mass: The mass of the object in kg/m³
         :param rotation_inertia: If None, it is computed by the Physics Engine
         :param elasticity: todo Not quite sure what the default is set to when left None, lets test it out!
         """
         super().__init__(*args, **kwargs)
-        self.mass = mass
+        self.mass = mass if isinstance(mass, float | int) else self.estimate_mass(mass, 1.)
         self.rotation_inertia = rotation_inertia
         self.friction: float = 0.2
         self.elasticity = elasticity
@@ -42,6 +45,19 @@ class PhysicalEntity(Sprite):
         self.max_vertical_velocity: int | None = None
         self.radius: float = 0
         self.collision_type: str | None = type(self).__name__
+
+    def estimate_mass(self, material: str | float, solidity_fraction: float) -> float:
+        """ Very roughly estimates the weight of an object based on its size, material and density.
+
+        :param material: one of the materials listed in the MATERIAL_WEIGHT dict or weight for the material in kg/m³
+        :param solidity_fraction: float in [0, 1] indicating how solid the object is, aka if it is hollow. 1. means it
+            is completely solid with no empty spaces within.
+        """
+        weight = MATERIAL_WEIGHT[material] if isinstance(material, str) else material
+        area = math_utils.polygon_area(self.texture.hit_box_points)  # noqa
+        volume = math_utils.sphere_volume_from_circle_area(area)
+        return volume * weight * solidity_fraction
+
 
     def get_physics(self) -> dict:
         """Returns all parameters needed by the physics engine in a neat dictionary."""
@@ -144,8 +160,19 @@ class Asteroid(PhysicalEntity):
         image_number = np.random.randint(1, (4 if size == "large" else 2) + 1)
         texture = arcade.load_texture(f":resources:images/space_shooter/meteorGrey_{size}{image_number}.png",
                                       hit_box_algorithm=arcade.hitbox.algo_detailed)
-        scale = scale or np.random.random((2,)) + 0.5
-        mass = self.size_to_default_mass[size] * np.linalg.norm(scale)**3
+        scale = scale or np.random.random() + 0.5 # todo scale width and height independently. But that somehow messes up Pymunk collision detection
+        if np.random.random() < 0.5:
+            texture = texture.flip_diagonally()
+        if np.random.random() < 0.5:
+            texture = texture.flip_vertically()
+        if np.random.random() < 0.5:
+            texture = texture.flip_left_right()
+        if np.random.random() < 0.5:
+            texture = texture.flip_horizontally()
+        if np.random.random() < 0.5:
+            texture = texture.flip_top_bottom()
+
+        mass = (self.size_to_default_mass[size] * np.linalg.norm(scale) / 2)  # ** 3
 
         super().__init__(path_or_texture=texture, scale=scale, mass=mass, *args, **kwargs)
 
@@ -160,6 +187,7 @@ class Combatant(PhysicalEntity):
         self.structure = Structure(entity=self)
         self.weapons = WeaponSystems(entity=self)
         self.sensor = Sensor(entity=self)
+        self.shields = Shields(entity=self)
 
     def upgrade(self, system: type[System], system_parameter: dict = None) -> Self:
         """Replaces an old system with a new one."""
@@ -169,12 +197,14 @@ class Combatant(PhysicalEntity):
             self.reactor = system_object
         elif issubclass(system, Engine):
             self.engine = system_object
-        elif issubclass(system, TestShipChassis):
+        elif issubclass(system, Structure):
             self.structure = system_object
         elif issubclass(system, WeaponSystems):
             self.weapons = system_object
         elif issubclass(system, Sensor):
             self.sensor = system_object
+        elif issubclass(system, Shields):
+            self.shields = system_object
         else:
             raise ValueError(f"Unknown System class {type(system)}.")
 

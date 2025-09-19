@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum, auto
 
+from control.physics import PhysicsEngine
+
 
 @dataclass
 class SystemEvent:
@@ -24,6 +26,11 @@ class System(ABC):
     def activate(self, *args, **kwargs):
         """Activates the systems function. This is called every tick. The effects depend on the system."""
         raise NotImplemented("abstract method")
+
+    @property
+    def physics_engine(self) -> PhysicsEngine:
+        """Return the physics engine associated with the entity the system belongs to."""
+        return self.entity.physics_engines[0]
 
 
 class Status(StrEnum):

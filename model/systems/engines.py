@@ -3,7 +3,6 @@ from typing import Optional
 
 import numpy as np
 
-from control.physics import PhysicsEngine
 from control.user_input import UserInput
 from control.math_utils import limit_vector, smallest_angle_difference
 from model.systems.common import Status, System
@@ -70,10 +69,6 @@ class Engine(System):
     is_burst_mode_active: bool = False
 
     _synced_with_physics_engine: bool = False  # were the values from the engine pushed to push the engine?
-
-    @property
-    def physics_engine(self) -> PhysicsEngine:
-        return self.entity.physics_engines[0]
 
     def _sync_with_physics_engine(self):
         """Sync parameters between the engine and the physics object.

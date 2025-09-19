@@ -50,6 +50,7 @@ class GameControl:
                     continue
                 entity.reactor.activate()
                 entity.structure.activate()
+                entity.shields.activate()
                 if entity is self.world.player:
                     entity.engine.activate(self.user_input)  # noqa does not recognice the check for Combatant
                 else:

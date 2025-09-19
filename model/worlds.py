@@ -6,9 +6,11 @@ from arcade import SpriteList, Sprite
 from pymunk import Arbiter, Space
 
 from control.physics import PhysicsEngine
-from model.entities import Player, Asteroid, WorldBorder, get_class_name
+from model.entities import Player, Asteroid, WorldBorder
+from model.common import get_class_name
 from model.systems.engines import TestShipEngine
 from model.systems.reactors import TestShipReactor
+from model.systems.shields import TestShipPhysicalDeflectionShields
 from model.systems.structures import TestShipChassis
 
 
@@ -122,6 +124,7 @@ class Multiverse:
         world_height = 600
 
         player = (Player(name="The Player", center_x=world_width // 2, center_y=world_height // 2)
-                  .upgrade(TestShipEngine).upgrade(TestShipReactor).upgrade(TestShipChassis))
+                  .upgrade(TestShipEngine).upgrade(TestShipReactor).upgrade(TestShipChassis)
+                  .upgrade(TestShipPhysicalDeflectionShields))
         world = AstroidShowerWorld(size=(world_width, world_height), player=player, num_asteroids=10)
         return world

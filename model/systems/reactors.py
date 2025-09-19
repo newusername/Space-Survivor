@@ -51,7 +51,7 @@ class Reactor(System):
 
         cost *= GameSettings.energy_multiplier
         if cost > self.capacitors_storage:
-            print(f"Not enough power for {source.name}")
+            print("Not enough power" + (f" for {source.name}" if source else "") + "!")
             return False
         else:
             self.capacitors_storage -= cost

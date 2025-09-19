@@ -8,6 +8,7 @@ import numpy as np
 from pygame.joystick import JoystickType
 
 from control.math_utils import get_point_angle
+from model.entities import Combatant
 from model.worlds import World
 from control.main import GameControl
 from settings import GameSettings
@@ -162,11 +163,18 @@ class GUI(arcade.Window):
         # Draw world background
         # todo load/ create some nice stars background + a bit of twinkle. Maybe even a bit of parallex effect?
 
+        # draw shields
+        for sprite in self.sprite_list:
+            if isinstance(sprite, Combatant) and sprite.shields.is_active:
+                arcade.draw_circle_filled(sprite.center_x, sprite.center_y, sprite.shields.shield_radius,
+                                          arcade.color.BLUE)
+
         # Draw sprites
         self.sprite_list.draw()
         if Settings.draw_hitbox:
             for sprite in self.sprite_list:
                 sprite.draw_hit_box(color=arcade.color.LIME_GREEN, line_thickness=2)
+
         # Draw world borders
         self.world.walls.draw()
 

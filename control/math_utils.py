@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 
@@ -56,3 +58,29 @@ def smallest_angle_difference(angle_1: float, angle_2: float) -> float:
     :return: a value in [-180, 180) representing the angle in degrees to get from angle_1 to angle_2.
     """
     return (angle_2 - angle_1 + 180) % 360 - 180
+
+
+def polygon_area(points: tuple[float, float]):
+    """Compute area of polygon using the shoelace formula.
+       Points must be in order (clockwise or counterclockwise)."""
+    n = len(points)
+    area = 0.0
+    for i in range(n):
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % n]
+        area += x1 * y2 - x2 * y1
+    return abs(area) / 2
+
+
+def sphere_volume_from_circle_area(area):
+    """
+    Compute the volume of a sphere given the area of a circle
+    with the same diameter.
+
+    Parameters:
+        area (float): Area of the circle
+
+    Returns:
+        float: Volume of the sphere
+    """
+    return (4 / 3) * (area ** 1.5) / math.sqrt(math.pi)
