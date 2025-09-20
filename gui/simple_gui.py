@@ -31,12 +31,26 @@ class GUI(arcade.Window):
         self.settings = Settings()
         super().__init__(self.settings.screen_width, self.settings.screen_height, "Arcade GUI")
 
-        arcade.set_background_color(arcade.color.BLACK)
+        self._load_shaders()
+
         self.camera = arcade.Camera2D()
         self.sprite_list = self.world.entities
         self.joystick = self.setup_joystick()
 
         arcade.enable_timings()
+
+    def _load_shaders(self):
+        """Load the shader files."""
+        file_name = "gui/shader/star_nest.glsl"
+        with open(file_name) as file:
+            shader_source = file.read()
+            self.background_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
+
+        # file_name = "gui/shader/shield.glsl"  # todo the alpha is not mixed correctly, so can't use this right now
+        # with open(file_name) as file:
+        #     shader_source = file.read()
+        #     self.shield_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
+        #     self.shield_shader.program['color'] = arcade.color.ALLOY_ORANGE.normalized
 
     @staticmethod
     def setup_joystick() -> Optional[JoystickType]:
@@ -161,13 +175,21 @@ class GUI(arcade.Window):
         self.camera.use()
 
         # Draw world background
-        # todo load/ create some nice stars background + a bit of twinkle. Maybe even a bit of parallex effect?
+        mouse_pos = (0, 0)  # self.mouse["x"], self.mouse["y"]
+        self.background_shader.render(time=self.time, mouse_position=mouse_pos)
 
         # draw shields
         for sprite in self.sprite_list:
             if isinstance(sprite, Combatant) and sprite.shields.is_active:
+                color = arcade.color.LIGHT_BLUE
+                # alpha = (abs(np.sin(self.time * 0.8)) * 127) + 127
+                alpha = 200
                 arcade.draw_circle_filled(sprite.center_x, sprite.center_y, sprite.shields.shield_radius,
-                                          arcade.color.BLUE)
+                                          color=(*color.rgb, alpha))
+                # self.shield_shader.program['center_uv'] = (0.5, 0.5)
+                # self.shield_shader.program['radius'] = 0.1  # sprite.shields.shield_radius # todo how do I normalize this? It depends on the zoom
+                # self.shield_shader.program['time'] = self.time
+                # self.shield_shader.render()
 
         # Draw sprites
         self.sprite_list.draw()
