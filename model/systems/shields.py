@@ -49,7 +49,7 @@ class TestShipPhysicalDeflectionShields(Shields):
             # Calculate repelling force
             force_magnitude = self.deflection_power / distance  # stronger when closer  # todo make it distance**2?
             if self.entity.reactor.power(self.power_consumption, self):
-                force = arbiter.normal * force_magnitude # todo would it be smarter to deflect at at perpendicular instead?
+                force = (other_body.position - own_body.position).normalized() * force_magnitude # todo would it be smarter to deflect at at perpendicular instead?
                 other_body.apply_force_at_local_point(force, (0, 0))  # todo would be more correct to apply the force at the contact point
 
         return False  # don't let sensor block movement

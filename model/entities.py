@@ -172,7 +172,7 @@ class Asteroid(PhysicalEntity):
         if np.random.random() < 0.5:
             texture = texture.flip_top_bottom()
 
-        mass = (self.size_to_default_mass[size] * np.linalg.norm(scale) / 2)  # ** 3
+        mass = self.size_to_default_mass[size] * scale**2
 
         super().__init__(path_or_texture=texture, scale=scale, mass=mass, *args, **kwargs)
 
