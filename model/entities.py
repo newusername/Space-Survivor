@@ -221,4 +221,5 @@ class Player(Combatant):
 
     def destroy(self):
         """Players are currently not allowed to die, because the GUI needs a player at all times at the moment."""
+        self.shields.activity_level = 0
         print("You died.")

@@ -5,6 +5,7 @@ import pymunk
 
 from model.common import get_class_name
 from model.systems.common import System
+from settings import GameSettings
 
 
 @dataclass(kw_only=True)
@@ -17,7 +18,7 @@ class Shields(System):
      shields are easier from game balancing stand point though. Maybe both?)
     """
     name: str = "Shields"
-    is_active: bool = False
+    activity_level: float = 0  # the shield "powers" down after use. This does not use additional energy and is only for show.
     deflection_power: float = 0  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
     power_consumption: float = 0 # how much power is consumed when an object is deflected
     radius: float = 0
@@ -30,7 +31,6 @@ class Shields(System):
 class TestShipPhysicalDeflectionShields(Shields):
     # very early version
     name: str = "Deflection Shield"
-    is_active: bool = True
     deflection_power: float = 1000  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
     power_consumption: float = 50 # how much power is consumed when an object is deflected
     radius: float = 20  # the distance from the ship the shield start to apply force. This is in addition to the entites size
@@ -38,6 +38,7 @@ class TestShipPhysicalDeflectionShields(Shields):
     is_initialised = False
 
     def _shield_collision(self, arbiter, _space, _data):
+        """Deflect other entities away from the shielded entity."""
         own_body = arbiter.shapes[0].body
         other_body = arbiter.shapes[1].body
         if not np.allclose(own_body.position, self.entity.position, rtol=5):
@@ -49,7 +50,9 @@ class TestShipPhysicalDeflectionShields(Shields):
             # Calculate repelling force
             force_magnitude = self.deflection_power / distance  # stronger when closer  # todo make it distance**2?
             if self.entity.reactor.power(self.power_consumption, self):
+                self.activity_level = 1
                 force = (other_body.position - own_body.position).normalized() * force_magnitude # todo would it be smarter to deflect at at perpendicular instead?
+                force = force.rotated(-other_body.angle)
                 other_body.apply_force_at_local_point(force, (0, 0))  # todo would be more correct to apply the force at the contact point
 
         return False  # don't let sensor block movement
@@ -61,6 +64,7 @@ class TestShipPhysicalDeflectionShields(Shields):
 
     def activate(self, *args, **kwargs):
         """Apply forces on all other objects within range of the shield to deflect them away from the ship."""
+        self.activity_level = max(0., self.activity_level - 1 / GameSettings.simulation_speed)
         if not self.is_initialised:
             """Add a sensor to the engine that detects the collisions."""
             self.is_initialised = True

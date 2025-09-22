@@ -78,13 +78,14 @@ class AstroidShowerWorld(World):
         while len(self.entities) - 1 < self.num_asteroids:
             # for now asteroids spawn on the right side and fly to the left.
             x, y, angle = self.size[0] - 100, random() * self.size[1], random() * 360
-            initial_speed = (-random() * 100, 0)
+            initial_speed = (-random() * 90, 0)
 
-            asteroid = Asteroid(center_x=x, center_y=y, angle=angle)
+            asteroid = Asteroid(center_x=x, center_y=y)
             self.entities.append(asteroid)
             self.physics_engine.add_sprite(asteroid, **asteroid.get_physics())
-            self.physics_engine.set_velocity(asteroid, initial_speed)
-            self.physics_engine.set_rotation(asteroid, random() * 0.5)
+            with self.physics_engine.set_current_entity(asteroid):
+                self.physics_engine.set_translational_speed(initial_speed)
+                self.physics_engine.set_rotational_speed(random() * 0.5)
 
     def set_default_collision_handlers(self):
         """Show impact for player collisions with asteroids."""
@@ -108,10 +109,11 @@ class Multiverse:
         world_height = 800
 
         player = (Player(name="The Player", center_x=world_width // 2, center_y=world_height // 2)
-                  .upgrade(TestShipEngine).upgrade(TestShipReactor))
+                  .upgrade(TestShipEngine).upgrade(TestShipReactor).upgrade(TestShipChassis)
+                  .upgrade(TestShipPhysicalDeflectionShields))
         start_entities = SpriteList()
         start_entities.extend((
-            Asteroid(center_x=world_width // 2, center_y=world_height - 100),
+            Asteroid(center_x=world_width // 2, center_y=world_height - 300, size="small"),
         ))
 
         world = World(size=(world_width, world_height), player=player, entities=start_entities)

@@ -84,25 +84,25 @@ class Engine(System):
 
     def activate(self, user_input: UserInput):
         """Steers the objects by updates the Dynamic's attributes in accordance with the engine."""
-        self.physics_engine.set_current_entity(self.entity)
-        if not self._synced_with_physics_engine:
-            self._sync_with_physics_engine()
+        with self.physics_engine.set_current_entity(self.entity):
+            if not self._synced_with_physics_engine:
+                self._sync_with_physics_engine()
 
-        self.is_maneuvering_thruster_active = False
-        self.is_burst_mode_active = False
+            self.is_maneuvering_thruster_active = False
+            self.is_burst_mode_active = False
 
-        # steer the ship according to user input
-        if user_input.stabilize and self.status_maneuvering_thrusters != Status.destroyed:
-            self._stop_translation()
-            self._stop_rotation()
-        else:  # no using the thrusters otherwise while the autopilot is at work!
-            if user_input.burst > 0 and self.status_main_thrusters != Status.destroyed:
-                self._burst_mode(user_input)
-            if self.status_maneuvering_thrusters != Status.destroyed:
-                if self.relative_movement_strength(user_input) > GameSettings.min_drift_strength:
-                    self._maneuver(user_input)
-                if user_input.orientation_strength > GameSettings.min_drift_strength:
-                    self._rotate(user_input)
+            # steer the ship according to user input
+            if user_input.stabilize and self.status_maneuvering_thrusters != Status.destroyed:
+                self._stop_translation()
+                self._stop_rotation()
+            else:  # no using the thrusters otherwise while the autopilot is at work!
+                if user_input.burst > 0 and self.status_main_thrusters != Status.destroyed:
+                    self._burst_mode(user_input)
+                if self.status_maneuvering_thrusters != Status.destroyed:
+                    if self.relative_movement_strength(user_input) > GameSettings.min_drift_strength:
+                        self._maneuver(user_input)
+                    if user_input.orientation_strength > GameSettings.min_drift_strength:
+                        self._rotate(user_input)
 
     def _stop_translation(self):
         """Fire maneuvering thrusters to cancel translation speed."""

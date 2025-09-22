@@ -1,10 +1,11 @@
+from contextlib import contextmanager
+
 import numpy as np
 from arcade import PymunkPhysicsEngine
 from pymunk import Vec2d
 
 from control.math_utils import smallest_angle_difference, vector_from_angle_magnitude, rotate_vector_2d
 
-from settings import GameSettings
 import model
 
 
@@ -17,10 +18,14 @@ class PhysicsEngine(PymunkPhysicsEngine):
         self.entity = None
         self.physics_object = None
 
+    @contextmanager
     def set_current_entity(self, entity: "model.entities.PhysicalEntity"):
         """Set a specific entity to be manipulated."""  # todo make this a context manager.
         self.entity = entity
         self.physics_object = self.get_physics_object(entity)
+        yield
+        self.entity = None
+        self.physics_object = None
 
     def get_translational_speed(self) -> Vec2d:
         """Return the translational speed vector of the entity."""

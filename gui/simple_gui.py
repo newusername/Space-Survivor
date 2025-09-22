@@ -180,10 +180,10 @@ class GUI(arcade.Window):
 
         # draw shields
         for sprite in self.sprite_list:
-            if isinstance(sprite, Combatant) and sprite.shields.is_active:
+            if isinstance(sprite, Combatant) and sprite.shields.activity_level:
                 color = arcade.color.LIGHT_BLUE
                 # alpha = (abs(np.sin(self.time * 0.8)) * 127) + 127
-                alpha = 200
+                alpha = sprite.shields.activity_level * 255
                 arcade.draw_circle_filled(sprite.center_x, sprite.center_y, sprite.shields.shield_radius,
                                           color=(*color.rgb, alpha))
                 # self.shield_shader.program['center_uv'] = (0.5, 0.5)
@@ -210,8 +210,7 @@ class GUI(arcade.Window):
         pos = self.camera.bottom_left
         player = self.world.player
         arcade.draw_text(f"fps: {arcade.get_fps(60):.2f}, #entities: {len(self.sprite_list)}, "
-                         f"Pose(x={player.center_x:.1f}, y={player.center_y:.1f}, orientation={player.angle:.1f}°),"
-                         f" speed {player.physics_engines[0].get_velocity():.1f}",
+                         f"Pose(x={player.center_x:.1f}, y={player.center_y:.1f}, orientation={player.angle:.1f}°)",
                          pos[0] + 10, pos[1] + 10, arcade.color.WHITE, 14)
 
     def draw_energy_bar(self):
