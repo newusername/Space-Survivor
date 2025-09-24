@@ -3,7 +3,7 @@
 import time
 
 from control.user_input import UserInput
-from model.entities import Combatant
+from model.entities import Combatant, RailgunProjectile, PhysicalEntity
 from model.worlds import World
 from settings import GameSettings
 
@@ -44,17 +44,21 @@ class GameControl:
         self._handle_non_game_user_input()
         self.world.world_update()
         for entity in self.world.entities:
-            if isinstance(entity, Combatant):
+            if isinstance(entity, PhysicalEntity):
                 if entity.structure.hp == 0:
-                    entity.destroy()
+                    entity.destroy(self.world.add_entity)
                     continue
-                entity.reactor.activate()
                 entity.structure.activate()
-                entity.shields.activate()
+
+            if isinstance(entity, Combatant):
+                entity.reactor.activate()
                 if entity is self.world.player:
                     entity.engine.activate(self.user_input)  # noqa does not recognice the check for Combatant
                 else:
                     pass  # todo implement logic to move NPCs
+                entity.shields.activate()
+                if shot_params := entity.railgun.activate(user_input=self.user_input):
+                    self.world.add_entity(RailgunProjectile, shot_params)
 
     def _handle_non_game_user_input(self):
         """React to non-game related user input such as opening menus."""

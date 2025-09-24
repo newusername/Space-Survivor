@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from typing import Callable
 
 import numpy as np
 from arcade import PymunkPhysicsEngine
@@ -165,3 +166,50 @@ class PhysicsEngine(PymunkPhysicsEngine):
 
     def get_rotational_inertia(self) -> float:  # todo I am a bit confused. Pymunk makes it sound like this is only inertia, but going deeper it looks like both
         return self.physics_object.body.moment
+
+    def add_wildcard_collision_handler(self, collision_type: str, begin_handler: Callable | None = None,
+                                       pre_handler: Callable | None = None, post_handler: Callable | None = None,
+                                       separate_handler: Callable | None = None):
+        """Adds a collision handler that handles all collisions for entities with the given collision_type.
+
+        :param collision_type: unique identifier for entities. Usually stored in Entity.collision_type
+        :param begin_handler: Function to call when a collision begins.
+        :param pre_handler: Function to call before a collision is resolved.
+        :param post_handler: Function to call after a collision is resolved.
+        :param separate_handler: Function to call when two objects
+        """
+        if collision_type not in self.collision_types:
+            self.collision_types.append(collision_type)
+        collision_type_index = self.collision_types.index(collision_type)
+
+        handler = self.space.add_wildcard_collision_handler(collision_type_index)
+        def _f1(arbiter, space, data):
+            sprite_a, sprite_b = self.get_sprites_from_arbiter(arbiter)
+            should_process_collision = False
+            if sprite_a is not None and sprite_b is not None and begin_handler is not None:
+                should_process_collision = begin_handler(sprite_a, sprite_b, arbiter, space, data)
+            return should_process_collision
+
+        def _f2(arbiter, space, data):
+            sprite_a, sprite_b = self.get_sprites_from_arbiter(arbiter)
+            if sprite_a is not None and sprite_b is not None and post_handler is not None:
+                post_handler(sprite_a, sprite_b, arbiter, space, data)
+
+        def _f3(arbiter, space, data):
+            sprite_a, sprite_b = self.get_sprites_from_arbiter(arbiter)
+            if pre_handler is not None:
+                return pre_handler(sprite_a, sprite_b, arbiter, space, data)
+
+        def _f4(arbiter, space, data):
+            sprite_a, sprite_b = self.get_sprites_from_arbiter(arbiter)
+            if separate_handler:
+                separate_handler(sprite_a, sprite_b, arbiter, space, data)
+
+        if begin_handler:
+            handler.begin = _f1
+        if post_handler:
+            handler.post_solve = _f2
+        if pre_handler:
+            handler.pre_solve = _f3
+        if separate_handler:
+            handler.separate = _f4

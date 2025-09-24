@@ -12,4 +12,4 @@ class GameSettings:
     simulation_speed: float = 60
     translation_speed_max: float = 2000
     rotation_speed_max: float = 10
-    min_drift_strength: float = 0.1
+    min_drift_strength: float = 0.2

@@ -73,6 +73,6 @@ class Reactor(System):
 @dataclass
 class TestShipReactor(Reactor):
     """For testing in debug mode."""
-    energy_production: float = 100
+    energy_production: float = 10
     capacitors_limit: float = 3000
     capacitors_storage: float = 3000

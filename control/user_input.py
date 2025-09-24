@@ -22,5 +22,8 @@ class UserInput:
     stabilize: bool = False
     orientation: float = 0
     orientation_strength: float = 0
+    fire_rail_guns: bool = False
+    fire_lasers: bool = False
+    fire_rockets: bool = False
     respawn: bool = False
 

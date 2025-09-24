@@ -28,6 +28,9 @@ Moving:
   - Maneuvering thrusters: much weaker, but can be directed in any direction. (Left stick for moving and right stick for rotating.)
 - Your ships board computer can take over to stabilize the ship and stop both rotation and movement using the maneuvering thrusters. (R1)
 
+Weapons:
+- Railgun: R1
+
 Misc:
 - Press the sticks to zoom in or out.
 

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import numpy as np
 import pymunk
 
-from model.common import get_class_name
 from model.systems.common import System
 from settings import GameSettings
 
@@ -28,9 +27,20 @@ class Shields(System):
 
 
 @dataclass(kw_only=True)
-class TestShipPhysicalDeflectionShields(Shields):
+class DeflectionShields(Shields):
     # very early version
     name: str = "Deflection Shield"
+    collision_type_name: str = "deflection_shield"
+    deflection_power: float = 0  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
+    power_consumption: float = 0 # how much power is consumed when an object is deflected
+    radius: float = 1  # the distance from the ship the shield start to apply force. This is in addition to the entites size
+
+    is_initialised = False
+
+@dataclass(kw_only=True)
+class TestShipPhysicalDeflectionShields(DeflectionShields):
+    # very early version
+    name: str = "Deflection Shield of the Testship"
     deflection_power: float = 1000  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
     power_consumption: float = 50 # how much power is consumed when an object is deflected
     radius: float = 20  # the distance from the ship the shield start to apply force. This is in addition to the entites size
@@ -39,6 +49,7 @@ class TestShipPhysicalDeflectionShields(Shields):
 
     def _shield_collision(self, arbiter, _space, _data):
         """Deflect other entities away from the shielded entity."""
+        # todo just saw there is sprite1, sprite2 = self.physics_engine.get_sprites_from_arbiter(arbiter). Use my physics engine interface instead of using Pymunk directly.
         own_body = arbiter.shapes[0].body
         other_body = arbiter.shapes[1].body
         if not np.allclose(own_body.position, self.entity.position, rtol=5):
@@ -71,10 +82,10 @@ class TestShipPhysicalDeflectionShields(Shields):
 
             shield_shape = pymunk.Circle(self.physics_engine.sprites[self.entity].body, self.shield_radius)
             shield_shape.sensor = True  # doesn't block but detects collisions
-            class_name = get_class_name(TestShipPhysicalDeflectionShields)
+            class_name = TestShipPhysicalDeflectionShields.collision_type_name
             space = self.physics_engine.space
             if class_name not in self.physics_engine.collision_types:
-                self.physics_engine.collision_types.append(get_class_name(TestShipPhysicalDeflectionShields))
+                self.physics_engine.collision_types.append(TestShipPhysicalDeflectionShields.collision_type_name)
             class_id = self.physics_engine.collision_types.index(class_name)
             shield_shape.collision_type = class_id
             space.add(shield_shape)

@@ -1,29 +1,70 @@
 """Contains the objects."""
-from typing import Self, Final
+from typing import Self, Callable
 
 import numpy as np
 import arcade
 from arcade import Sprite, SpriteList, PymunkPhysicsEngine
 
 from control import math_utils
+from control.physics import PhysicsEngine
+from model.common import MATERIAL_WEIGHT, AsteroidSizes, Materials
 from model.systems.common import System
 from model.systems.engines import Engine
 from model.systems.reactors import Reactor
 from model.systems.sensors import Sensor
 from model.systems.shields import Shields
-from model.systems.structures import Structure
-from model.systems.weapons import WeaponSystems
+from model.systems.structures import Structure, AsteroidStructure
+from model.systems.weapons import Railgun
 from settings import GameSettings
 
 
-MATERIAL_WEIGHT: Final[dict] = {  # average weight of 1m³ of material in kg
-    "rock": 2700.,
-    "steel": 7800.
-}
+class WorldBorder(arcade.SpriteSolidColor):
+    """Helps to create Sprite at the edge of the map that nothing can pass and signals to the player that there is
+    nothing more to explore in this direction."""
+    name: str = "World Border"
+    collision_type_name: str = "world_border"
+
+    @classmethod
+    def create_world_border(cls, world_size: tuple[int, int], wall_color = arcade.color.GRAY) -> SpriteList:
+        """Create boxes that frame the entire simulated world. Currently, this is just 4 colored boxes.
+
+        :param world_size: The size of the entire simulated world.
+        :param wall_color: The color of the border.
+        """
+        width, height = world_size
+        thickness = 10
+        walls = arcade.SpriteList()
+        walls.extend([
+            WorldBorder(width + thickness, thickness, width / 2, -thickness / 2, wall_color),  # bottom
+            WorldBorder(width + thickness, thickness, width / 2, height + thickness / 2, wall_color),  # top
+            WorldBorder(thickness, height, -thickness / 2, height / 2, wall_color),  # left
+            WorldBorder(thickness, height, width + thickness / 2, height / 2, wall_color),  # right
+        ])
+        return walls
+
+    @staticmethod
+    def get_physics() -> dict:
+        """Returns all parameters needed by the physics engine in a neat dictionary."""
+        return {
+            "mass": 1,
+            "moment_of_inertia": PymunkPhysicsEngine.MOMENT_INF,
+            "friction": 0,
+            "elasticity": 0,
+            "body_type": PymunkPhysicsEngine.STATIC,
+            "damping": None,
+            "gravity": None,
+            "max_velocity": None,
+            "max_horizontal_velocity": None,
+            "max_vertical_velocity": None,
+            "radius": 0,
+            "collision_type": WorldBorder.collision_type_name
+        }
 
 
 class PhysicalEntity(Sprite):
     """Base class for all interactive objects that should be rendered."""
+    collision_type_name: str = "physical_entity"
+
     def __init__(self, mass: float | str = 1., rotation_inertia: float = None,
                  max_velocity: float = GameSettings.translation_speed_max,
                  elasticity: float = None, *args, **kwargs):
@@ -44,7 +85,8 @@ class PhysicalEntity(Sprite):
         self.max_horizontal_velocity: int | None = None
         self.max_vertical_velocity: int | None = None
         self.radius: float = 0
-        self.collision_type: str | None = type(self).__name__
+
+        self.structure = Structure(entity=self)
 
     def estimate_mass(self, material: str | float, solidity_fraction: float) -> float:
         """ Very roughly estimates the weight of an object based on its size, material and density.
@@ -73,8 +115,13 @@ class PhysicalEntity(Sprite):
             "max_horizontal_velocity": self.max_horizontal_velocity,
             "max_vertical_velocity": self.max_vertical_velocity,
             "radius": self.radius,
-            "collision_type": self.collision_type
+            "collision_type": self.collision_type_name
         }
+
+    @property
+    def physics_engine(self) -> PhysicsEngine:
+        """Return the physics engine associated with the entity the system belongs to."""
+        return self.physics_engines[0]
 
     @property
     def angle(self) -> float:
@@ -99,65 +146,26 @@ class PhysicalEntity(Sprite):
 
         self.update_spatial_hash()
 
-    def destroy(self):
-        """Is called when the object is destroyed."""
+    def destroy(self, add_entity_func: Callable):
+        """Is called when the object is destroyed. Can spawn debris Sprites."""
         self.remove_from_sprite_lists()
-
-
-class WorldBorder:
-    """Helps to create Sprite at the edge of the map that nothing can pass and signals to the player that there is
-    nothing more to explore in this direction."""
-    name: str = "WorldBorder"
-    @classmethod
-    def create_world_border(cls, world_size: tuple[int, int], wall_color = arcade.color.GRAY) -> SpriteList:
-        """Create boxes that frame the entire simulated world. Currently, this is just 4 colored boxes.
-
-        :param world_size: The size of the entire simulated world.
-        :param wall_color: The color of the border.
-        """
-        width, height = world_size
-        thickness = 10
-        walls = arcade.SpriteList()
-        walls.extend([
-            arcade.SpriteSolidColor(width + thickness, thickness, width / 2, -thickness / 2, wall_color),  # bottom
-            arcade.SpriteSolidColor(width + thickness, thickness, width / 2, height + thickness / 2, wall_color),  # top
-            arcade.SpriteSolidColor(thickness, height, -thickness / 2, height / 2, wall_color),  # left
-            arcade.SpriteSolidColor(thickness, height, width + thickness / 2, height / 2, wall_color),  # right
-        ])
-        return walls
-
-    @staticmethod
-    def get_physics() -> dict:
-        """Returns all parameters needed by the physics engine in a neat dictionary."""
-        return {
-            "mass": 1,
-            "moment_of_inertia": PymunkPhysicsEngine.MOMENT_INF,
-            "friction": 0,
-            "elasticity": 0,
-            "body_type": PymunkPhysicsEngine.STATIC,
-            "damping": None,
-            "gravity": None,
-            "max_velocity": None,
-            "max_horizontal_velocity": None,
-            "max_vertical_velocity": None,
-            "radius": 0,
-            "collision_type": "WorldBorder"
-        }
 
 
 class Asteroid(PhysicalEntity):
     """A simple peace of rock floating through space."""
     size_to_default_mass = {
-        "tiny": 0.1,
-        "small": 1.,
-        "med": 3.,
-        "big": 10.0
+        AsteroidSizes.tiny: 0.1,
+        AsteroidSizes.small: 1.,
+        AsteroidSizes.med: 3.,
+        AsteroidSizes.big: 10.0
     }
-    def __init__(self, size: str = "random", scale: float = None, *args, **kwargs):
+    def __init__(self, size: AsteroidSizes = None, scale: float = None, *args, **kwargs):
         """Create a random sized asteroid if no sprite is given."""
-        if size == "random":
-            size = np.random.choice(["tiny", "small", "med", "big"])
-        image_number = np.random.randint(1, (4 if size == "large" else 2) + 1)
+        if size is None:
+            size = np.random.choice(AsteroidSizes)
+        self.size_class = size
+
+        image_number = np.random.randint(1, (4 if size == AsteroidSizes.big else 2) + 1)
         texture = arcade.load_texture(f":resources:images/space_shooter/meteorGrey_{size}{image_number}.png",
                                       hit_box_algorithm=arcade.hitbox.algo_detailed)
         scale = scale or np.random.random() + 0.5 # todo scale width and height independently. But that somehow messes up Pymunk collision detection
@@ -172,20 +180,46 @@ class Asteroid(PhysicalEntity):
         if np.random.random() < 0.5:
             texture = texture.flip_top_bottom()
 
-        mass = self.size_to_default_mass[size] * scale**2
+        mass = kwargs.pop("mass", None) or self.size_to_default_mass[size] * scale**2
 
         super().__init__(path_or_texture=texture, scale=scale, mass=mass, *args, **kwargs)
+        self.structure = AsteroidStructure(entity=self, size=size, mass=mass, material=Materials.rock)
+
+    def destroy(self, add_entity_func: Callable):
+        """When asteroids are destroyed they break apart and spawn new smaller asteroids."""
+        if self.size_class == AsteroidSizes.get_smallest_size():
+            # cannot split in anything smaller
+            return
+
+        with self.physics_engine.set_current_entity(self):
+            mass = self.mass  * 0.9
+            velocity = self.physics_engine.get_translational_speed()
+            rotational_speed = self.physics_engine.get_rotational_speed()
+        self.remove_from_sprite_lists()
+
+        # todo add some particle cloud effect to cover the split
+        while mass >= self.size_to_default_mass[AsteroidSizes.tiny]:
+            size = np.random.choice(AsteroidSizes.get_smaller_sizes(self.structure.size))
+            new_asteroid = add_entity_func(
+                Asteroid, {"size": size, "center_x": self.center_x, "center_y": self.center_y,
+                           "translational_speed": velocity, "rotational_speed": rotational_speed,
+                           "time_left_invulnerable": 1})
+            mass -= new_asteroid.mass
 
 
 class Combatant(PhysicalEntity):
     """Represents all objects that partake in battle."""
     def __init__(self, *args, **kwargs):
-        """Create the most basic combatant. Use the upgrade() function to customize it."""
+        """Create the most basic combatant. Use the upgrade() function to customize it.
+
+        :param add_entity_func: A function that adds PhysicalEntities to a world.
+        """
         super().__init__(*args, **kwargs)
+
+        self.add_entity_func: Callable
         self.reactor = Reactor(entity=self)
         self.engine = Engine(entity=self)
-        self.structure = Structure(entity=self)
-        self.weapons = WeaponSystems(entity=self)
+        self.railgun = Railgun(entity=self)
         self.sensor = Sensor(entity=self)
         self.shields = Shields(entity=self)
 
@@ -199,8 +233,8 @@ class Combatant(PhysicalEntity):
             self.engine = system_object
         elif issubclass(system, Structure):
             self.structure = system_object
-        elif issubclass(system, WeaponSystems):
-            self.weapons = system_object
+        elif issubclass(system, Railgun):
+            self.railgun = system_object
         elif issubclass(system, Sensor):
             self.sensor = system_object
         elif issubclass(system, Shields):
@@ -219,7 +253,19 @@ class Player(Combatant):
         super().__init__(path_or_texture=texture, *args, **kwargs)
         self.player_name = name
 
-    def destroy(self):
+    def destroy(self, add_entity_func: Callable):
         """Players are currently not allowed to die, because the GUI needs a player at all times at the moment."""
         self.shields.activity_level = 0
         print("You died.")
+
+
+class Projectile(PhysicalEntity):
+    """Usually small objects accelerate with great speeds at other things with the intent to poke holes into them."""
+    def __init__(self, damage_multiplier: float = 1, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.damage_multiplier = damage_multiplier
+        self.structure.max_hp = 10_000
+
+
+class RailgunProjectile(Projectile):
+    pass

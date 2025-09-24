@@ -156,6 +156,13 @@ class GUI(arcade.Window):
             self.control.user_input.orientation = get_point_angle(right_joystick_x, right_joystick_y)
             self.control.user_input.orientation_strength = np.sqrt(right_joystick_x**2 + right_joystick_y**2)
 
+            # weapons
+            if self.joystick.get_button(5):  # L1
+                self.control.user_input.fire_rail_guns = True
+
+            if self.joystick.get_button(7):  # L2
+                self.control.user_input.fire_lasers = True
+
             # Zoom
             if self.joystick.get_button(13):  # down
                 self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 0.95))
