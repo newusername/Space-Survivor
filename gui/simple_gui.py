@@ -8,6 +8,7 @@ import numpy as np
 from pygame.joystick import JoystickType
 
 from control.math_utils import get_point_angle
+from gui.controller import ControllerMapping, ControllerInput, InputType
 from model.entities import Combatant
 from model.worlds import World
 from control.main import GameControl
@@ -29,6 +30,7 @@ class GUI(arcade.Window):
         self.world = world
         self.control = control
         self.settings = Settings()
+        self.controller = ControllerMapping()
         super().__init__(self.settings.screen_width, self.settings.screen_height, "Arcade GUI")
 
         self._load_shaders()
@@ -145,45 +147,55 @@ class GUI(arcade.Window):
         on_update().
         """
         if self.joystick:
-            drift_thresh = GameSettings.min_drift_strength
             pygame.event.pump()
+
             # Move player (left stick)
-            self.control.user_input.movement_width = self.suppress_activation(self.joystick.get_axis(0), drift_thresh)
-            self.control.user_input.movement_height = -self.suppress_activation(self.joystick.get_axis(1), drift_thresh)
-            r2 = self.joystick.get_axis(5) if self.joystick.get_numaxes() > 4 else self.joystick.get_button(8)
-            self.control.user_input.burst = r2  # todo Check the axes version. Is it between -1 and 1? what is not pressed?
-            if self.control.user_input.burst > 0.1:
-                self.joystick.rumble(1, 0, 1000)  # todo the test controller seems to only support on and off and only uses one motor
-            else:
-                self.joystick.stop_rumble()
-            self.control.user_input.stabilize = self.joystick.get_button(6)  # R1
+            self.control.user_input.movement_width = self._get_axis_value(self.controller.left_stick_horizontal)
+            self.control.user_input.movement_height = self._get_axis_value(self.controller.left_stick_vertical)
 
             # Rotation (right stick)
-            right_joystick_x = self.suppress_activation(self.joystick.get_axis(2), drift_thresh)
-            right_joystick_y = -self.suppress_activation(self.joystick.get_axis(3), drift_thresh)  # inverted
-            self.control.user_input.orientation = get_point_angle(right_joystick_x, right_joystick_y)
-            self.control.user_input.orientation_strength = np.sqrt(right_joystick_x**2 + right_joystick_y**2)
+            right_joystick_width = self._get_axis_value(self.controller.right_stick_horizontal)
+            right_joystick_height = self._get_axis_value(self.controller.right_stick_vertical)
+            self.control.user_input.orientation = get_point_angle(right_joystick_width, right_joystick_height)
+            self.control.user_input.orientation_strength = np.sqrt(right_joystick_width ** 2 + right_joystick_height ** 2)
 
-            # weapons
-            if self.joystick.get_button(5):  # L1
-                self.control.user_input.fire_rail_guns = True
+            # R/L buttons
+            self.control.user_input.fire_rail_guns = bool(self.joystick.get_button(self.controller.l1.number))
+            self.control.user_input.stabilize = bool(self.joystick.get_button(self.controller.r1.number))
 
-            if self.joystick.get_button(7):  # L2
-                self.control.user_input.fire_lasers = True
+            if self.controller.r2.type == InputType.button:
+                self.control.user_input.burst = bool(self.joystick.get_button(self.controller.r2.number))
+            elif self.controller.r2.type == InputType.axis:
+                self.control.user_input.burst = self._get_axis_value(self.controller.r2)
+
+            if self.control.user_input.burst > 0.1:  # todo: move this somewhere more appropriate
+                self.joystick.rumble(1, 0, 1000)
+            else:
+                self.joystick.stop_rumble()
 
             # Zoom
-            if self.joystick.get_button(13):  # down
+            if self.joystick.get_button(self.controller.left_stick_button.number):  # down
                 self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 0.95))
-            elif self.joystick.get_button(12):  # up
+            if self.joystick.get_button(self.controller.right_stick_button.number):  # up
                 self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 1.05))
 
+    def _get_axis_value(self, controller_input: ControllerInput) -> float:
+        """Get a value for an axis input."""
+        value = self.joystick.get_axis(controller_input.number)
+        if controller_input.is_inverted:
+            value *= -1
+        return self.suppress_activation(value, controller_input.default_value, GameSettings.min_drift_strength)
+
     @staticmethod
-    def suppress_activation(value: float, thresh: float):
-        """Reduce the value to 0 if it is smaller than the thresh. Useful e.g. to handle stick drifts..."""
-        if abs(value) >= thresh:
+    def suppress_activation(value: float, default_value: float, thresh: float):
+        """Check if the value differs more than the thresh from the default value. I not, it returns the default value.
+
+        This is intended to be used to counter stick drifts.
+        """
+        if abs(value - default_value) >= thresh:
             return value
         else:
-            return 0
+            return default_value
 
     def on_draw(self):
         self.clear()
