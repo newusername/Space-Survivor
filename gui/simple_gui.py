@@ -39,6 +39,14 @@ class GUI(arcade.Window):
 
         arcade.enable_timings()
 
+    def _enable_transparency(self):
+        """ Activates transparency for shaders.
+
+        Note: Rendering the arcade SpriteLists resets these settings."""
+        self.ctx.disable(self.ctx.DEPTH_TEST)
+        self.ctx.blend_func = (self.ctx.SRC_ALPHA, self.ctx.ONE_MINUS_SRC_ALPHA)
+        self.ctx.enable(self.ctx.BLEND)
+
     def _load_shaders(self):
         """Load the shader files."""
         file_name = "gui/shader/star_nest.glsl"
@@ -46,11 +54,11 @@ class GUI(arcade.Window):
             shader_source = file.read()
             self.background_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
 
-        # file_name = "gui/shader/shield.glsl"  # todo the alpha is not mixed correctly, so can't use this right now
-        # with open(file_name) as file:
-        #     shader_source = file.read()
-        #     self.shield_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
-        #     self.shield_shader.program['color'] = arcade.color.ALLOY_ORANGE.normalized
+        file_name = "gui/shader/shield.glsl"
+        with open(file_name) as file:
+            shader_source = file.read()
+            self.shield_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
+            self.shield_shader.program['color'] = arcade.color.ALLOY_ORANGE.normalized
 
     @staticmethod
     def setup_joystick() -> Optional[JoystickType]:
@@ -188,15 +196,16 @@ class GUI(arcade.Window):
         # draw shields
         for sprite in self.sprite_list:
             if isinstance(sprite, Combatant) and sprite.shields.activity_level:
-                color = arcade.color.LIGHT_BLUE
-                # alpha = (abs(np.sin(self.time * 0.8)) * 127) + 127
-                alpha = sprite.shields.activity_level * 255
-                arcade.draw_circle_filled(sprite.center_x, sprite.center_y, sprite.shields.shield_radius,
-                                          color=(*color.rgb, alpha))
-                # self.shield_shader.program['center_uv'] = (0.5, 0.5)
-                # self.shield_shader.program['radius'] = 0.1  # sprite.shields.shield_radius # todo how do I normalize this? It depends on the zoom
-                # self.shield_shader.program['time'] = self.time
-                # self.shield_shader.render()
+                color = np.array(self.shield_shader.program['color']) * 255
+                if Settings.draw_hitbox:
+                    color[-1] = sprite.shields.activity_level * 255
+                    arcade.draw_circle_outline(sprite.center_x, sprite.center_y, sprite.shields.shield_radius,
+                                               color=tuple(color))
+                self._enable_transparency()
+                self.shield_shader.program['center_uv'] = (0.5, 0.5)
+                self.shield_shader.program['radius'] = sprite.shields.shield_radius / self.width
+                self.shield_shader.program['time'] = self.time
+                self.shield_shader.render()
 
         # Draw sprites
         self.sprite_list.draw()

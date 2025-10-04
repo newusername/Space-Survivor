@@ -14,7 +14,7 @@ class Shields(System):
     Ideas:
     - use the physics radius to make the shield extend the ship for collisions (this would be an easy start, but having
      it more like force field that applies force to incoming projectiles to deflect them would much cooler. Classical
-     shields are easier from game balancing stand point though. Maybe both?)
+     shields are easier from game balancing standpoint though. Maybe both?)
     """
     name: str = "Shields"
     activity_level: float = 0  # the shield "powers" down after use. This does not use additional energy and is only for show.
@@ -37,13 +37,14 @@ class DeflectionShields(Shields):
 
     is_initialised = False
 
+
 @dataclass(kw_only=True)
 class TestShipPhysicalDeflectionShields(DeflectionShields):
     # very early version
     name: str = "Deflection Shield of the Testship"
     deflection_power: float = 1000  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
     power_consumption: float = 50 # how much power is consumed when an object is deflected
-    radius: float = 20  # the distance from the ship the shield start to apply force. This is in addition to the entites size
+    radius: float = 20  # the distance from the ship the shield start to apply force. This is in addition to the entities size
 
     is_initialised = False
 
@@ -70,7 +71,7 @@ class TestShipPhysicalDeflectionShields(DeflectionShields):
 
     @property
     def shield_radius(self):
-        """The maximum distance the shield affects other objects."""
+        """The maximum distance the shield affects other objects from the center of the entity."""
         return max(self.entity.size) / 2 + self.radius
 
     def activate(self, *args, **kwargs):
