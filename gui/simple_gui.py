@@ -1,26 +1,44 @@
 """A simple GUI for testing using Arcade for rendering and Pygame for input."""
-from dataclasses import dataclass
+import pyglet
+from pymunk import Vec2d
+
+pyglet.options.dpi_scaling = "real"  # this disable display scaling
+
+
+from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 import arcade
 import pygame
 import numpy as np
+from arcade import Sprite, LRBT, Rect
 from pygame.joystick import JoystickType
 
 from control.math_utils import get_point_angle
 from gui.controller import ControllerMapping, ControllerInput, InputType
-from model.entities import Combatant
+from model.entities import Combatant, RailgunProjectile
 from model.worlds import World
 from control.main import GameControl
 from settings import GameSettings
 
 
 @dataclass(kw_only=True)
+class WindowSettings:
+    """Settings passed to the Window directly. Uses the parameter names expected by Arcade.
+
+    Note: width and height are subject to the systems display scaling.
+    """
+    width: int = 1600
+    height: int = 1200
+    fullscreen: bool = False
+    vsync: bool = True
+
+
+@dataclass(kw_only=True)
 class Settings:
     """Has the GUI settings."""
-    screen_width: int = 800
-    screen_height: int = 600
-    zoom: float = 0.8
+    window_settings: WindowSettings = field(default_factory=lambda: WindowSettings())
+    zoom: float = 1.
     draw_hitbox: bool = False
 
 
@@ -31,11 +49,12 @@ class GUI(arcade.Window):
         self.control = control
         self.settings = Settings()
         self.controller = ControllerMapping()
-        super().__init__(self.settings.screen_width, self.settings.screen_height, "Arcade GUI")
+        super().__init__(title="Arcade GUI", **asdict(self.settings.window_settings))
 
         self._load_shaders()
 
         self.camera = arcade.Camera2D()
+        self.camera_view: Rect = self._get_camera_view()
         self.sprite_list = self.world.entities
         self.joystick = self.setup_joystick()
 
@@ -61,6 +80,28 @@ class GUI(arcade.Window):
             shader_source = file.read()
             self.shield_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
             self.shield_shader.program['color'] = arcade.color.ALLOY_ORANGE.normalized
+
+        file_name = "gui/shader/glow_ball.glsl"
+        with open(file_name) as file:
+            shader_source = file.read()
+            self.railgun_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
+            self.railgun_shader.program['color'] = arcade.color.GOLD_FUSION.normalized[0:3]
+
+    def _get_camera_view(self) -> Rect:
+        """Return a rectangle that includes the area of the world currently in view."""
+        return self.camera.projection.at_position(self.camera.position)
+
+    def _sprite_in_view(self, sprite: Sprite) -> bool:
+        """Return True if the sprite center is visible in the current camera view."""
+        sprite_rect = LRBT(sprite.left, sprite.right, sprite.bottom, sprite.top)
+        return self.camera_view.overlaps(sprite_rect)
+
+    def m_to_pixels(self, size: float) -> float:
+        """Converts meter to the corresponding number of pixels on the screen.
+
+        1m = 1 pixel of a sprite at zoom = 1.
+        """
+        return self.camera.zoom * size
 
     @staticmethod
     def setup_joystick() -> Optional[JoystickType]:
@@ -139,6 +180,7 @@ class GUI(arcade.Window):
         player_sprite: arcade.Sprite = self.world.player
         self.camera.position = (player_sprite.center_x, player_sprite.center_y)
         self.camera.zoom = self.settings.zoom
+        self.camera_view: Rect = self._get_camera_view()
 
     def _handle_joystick_inputs(self):
         """Handle the Joystick inputs.
@@ -206,18 +248,29 @@ class GUI(arcade.Window):
         self.background_shader.render(time=self.time, mouse_position=mouse_pos)
 
         # draw shields
+        self._enable_transparency()
         for sprite in self.sprite_list:
             if isinstance(sprite, Combatant) and sprite.shields.activity_level:
-                color = np.array(self.shield_shader.program['color']) * 255
+                sprite.shields.activity_level = 1
                 if Settings.draw_hitbox:
+                    color = np.array(self.shield_shader.program['color']) * 255
                     color[-1] = sprite.shields.activity_level * 255
                     arcade.draw_circle_outline(sprite.center_x, sprite.center_y, sprite.shields.shield_radius,
                                                color=tuple(color))
-                self._enable_transparency()
-                self.shield_shader.program['center_uv'] = (0.5, 0.5)
-                self.shield_shader.program['radius'] = sprite.shields.shield_radius / self.width
+                    self._enable_transparency()
+                self.shield_shader.program['pos_uv'] = self.camera_view.position_to_uv(sprite.position)
+                self.shield_shader.program['radius'] = self.m_to_pixels(sprite.shields.shield_radius)
                 self.shield_shader.program['time'] = self.time
+                self.shield_shader.program['activity_level'] = sprite.shields.activity_level
                 self.shield_shader.render()
+
+        # draw bullets
+        self._enable_transparency()
+        for sprite in self.sprite_list:
+            if isinstance(sprite, RailgunProjectile) and self._sprite_in_view(sprite):
+                self.railgun_shader.program['pos_uv'] = self.camera_view.position_to_uv(sprite.position)
+                self.railgun_shader.program['size'] = self.camera.zoom * sprite.radius
+                self.railgun_shader.render()
 
         # Draw sprites
         self.sprite_list.draw()

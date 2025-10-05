@@ -265,6 +265,7 @@ class Projectile(PhysicalEntity):
         super().__init__(*args, **kwargs)
         self.damage_multiplier = damage_multiplier
         self.structure.max_hp = 10_000
+        self.radius = 0.01
 
 
 class RailgunProjectile(Projectile):

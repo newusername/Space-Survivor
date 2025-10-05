@@ -17,7 +17,7 @@ class Shields(System):
      shields are easier from game balancing standpoint though. Maybe both?)
     """
     name: str = "Shields"
-    activity_level: float = 0  # the shield "powers" down after use. This does not use additional energy and is only for show.
+    activity_level: float = 0  # in range [0, 1]; the shield "powers" down after use. This does not use additional energy and is only for show.
     deflection_power: float = 0  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
     power_consumption: float = 0 # how much power is consumed when an object is deflected
     radius: float = 0
@@ -44,7 +44,7 @@ class TestShipPhysicalDeflectionShields(DeflectionShields):
     name: str = "Deflection Shield of the Testship"
     deflection_power: float = 1000  # how strong the force is that the shield applies to incoming objects to deflect them away from the entity
     power_consumption: float = 50 # how much power is consumed when an object is deflected
-    radius: float = 20  # the distance from the ship the shield start to apply force. This is in addition to the entities size
+    radius: float = 20  # the distance from the ship the shield start to apply force. This is in addition to the entities radius
 
     is_initialised = False
 
