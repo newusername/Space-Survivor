@@ -57,6 +57,8 @@ class GUI(arcade.Window):
         self.camera_view: Rect = self._get_camera_view()
         self.sprite_list = self.world.entities
         self.joystick = self.setup_joystick()
+        self.keys = pyglet.window.key.KeyStateHandler()
+        self.push_handlers(self.keys)
 
         arcade.enable_timings()
 
@@ -128,12 +130,6 @@ class GUI(arcade.Window):
                 self.control.user_input.movement_height = 1
             case arcade.key.DOWN | arcade.key.S:
                 self.control.user_input.movement_height = -1
-            case arcade.key.Q:
-                self.control.user_input.orientation = (self.world.player.angle - 179) % 360
-                self.control.user_input.orientation_strength = 1
-            case arcade.key.E:
-                self.control.user_input.orientation = (self.world.player.angle + 179) % 360
-                self.control.user_input.orientation_strength = 1
             case arcade.key.ESCAPE:
                 self.close()
             case arcade.key.R:
@@ -152,19 +148,45 @@ class GUI(arcade.Window):
                 self.control.user_input.movement_height = 0
             case arcade.key.DOWN | arcade.key.S:
                 self.control.user_input.movement_height = 0
-            case arcade.key.Q:
-                self.control.user_input.orientation = 0
-                self.control.user_input.orientation_strength = 0
-            case arcade.key.E:
-                self.control.user_input.orientation = 0
-                self.control.user_input.orientation_strength = 0
+
+    def _handle_mouse_keyboard_inputs(self):
+        """Use keyboard and mouse inputs.
+
+        Note: Arcade prefers it if mouse/ keyboard inputs are handled via event handlers. See e.g.
+            - on_mouse_motion
+            - on_key_press
+            ...
+            However, this can be circumvented with pyglet.
+        """
+        if self.keys[pyglet.window.key.Q]:
+            self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 1.03))
+        if self.keys[pyglet.window.key.E]:
+            self.settings.zoom = max(0.2, min(2.0, self.settings.zoom * 0.96))
+
+        user_input = self.control.user_input
+        user_input.stabilize = True if self.keys[pyglet.window.key.LCTRL] else False
+        user_input.burst = 1 if self.keys[pyglet.window.key.LSHIFT] else 0
+
+    def on_mouse_press(self, x, y, button, key_modifiers):
+        """Called when the user presses a mouse button."""
+        if button == arcade.MOUSE_BUTTON_LEFT:
+            self.control.user_input.fire_rail_guns = True
+        if button == arcade.MOUSE_BUTTON_RIGHT:
+            self.control.user_input.fire_lasers = True
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        """Event handler for mouse movements. Is called when the mouse moves over the window."""
+        relative_position = Vec2d(x=x, y=y) - self.camera.project(self.control.world.player.position)
+        orientation = get_point_angle(*relative_position)
+        self.control.user_input.orientation = orientation
+        self.control.user_input.orientation_strength = 1
 
     def on_update(self, delta_time: float = None):
         """Notes:
 
         The sprites are automatically synced with the model by arcades Pymunk wrapper for the physics engine.
         """
-        self._handle_joystick_inputs()
+        self._handle_player_inputs()
 
         # Update the world (this is only temporary, because it is much easier to implement this way.)
         num_ticks_to_execute = 1
@@ -181,6 +203,13 @@ class GUI(arcade.Window):
         self.camera.position = (player_sprite.center_x, player_sprite.center_y)
         self.camera.zoom = self.settings.zoom
         self.camera_view: Rect = self._get_camera_view()
+
+    def _handle_player_inputs(self):
+        """Handle the players inputs."""
+        if self.joystick:
+            self._handle_joystick_inputs()
+        else:
+            self._handle_mouse_keyboard_inputs()
 
     def _handle_joystick_inputs(self):
         """Handle the Joystick inputs.
@@ -251,7 +280,6 @@ class GUI(arcade.Window):
         self._enable_transparency()
         for sprite in self.sprite_list:
             if isinstance(sprite, Combatant) and sprite.shields.activity_level:
-                sprite.shields.activity_level = 1
                 if Settings.draw_hitbox:
                     color = np.array(self.shield_shader.program['color']) * 255
                     color[-1] = sprite.shields.activity_level * 255

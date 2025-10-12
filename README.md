@@ -16,23 +16,24 @@ Follow these steps:
 4. Then start the game with `uv run main.py`.
 
 ## Game Manual
-
 Currently, there is only a minigame available which is more of a tech demo testing the physics engine.
 
 Your goal is simple, dodge the asteroids and don't get squashed!
 
 ### Controls
+The game supports mouse-keyboard or controller input.
+
 Moving:
 - There are two types of drives. 
-  - Main thruster: powerful, but can only move straight ahead (R2)
-  - Maneuvering thrusters: much weaker, but can be directed in any direction. (Left stick for moving and right stick for rotating.)
-- Your ships board computer can take over to stabilize the ship and stop both rotation and movement using the maneuvering thrusters. (R1)
+  - Main thruster: powerful, but can only move straight ahead (shift/ R2)
+  - Maneuvering thrusters: much weaker, but can be directed in any direction. (wasd for moving and mouse position for rotation/ Left stick for moving and right stick for rotating.)
+- Your ships board computer can take over to stabilize the ship and stop both rotation and movement using the maneuvering thrusters. (left ctrl/ R1)
 
 Weapons:
-- Railgun: R1
+- Railgun: left mouse/ R1
 
 Misc:
-- Press the sticks to zoom in or out.
+- Camera zoom (q and e/ press the sticks).
 
 ## KNOWN ISSUES
 - all done :D
