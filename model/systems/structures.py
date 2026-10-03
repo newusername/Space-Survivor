@@ -10,13 +10,14 @@ class Structure(System):
     """Defines the structure of an entity."""
     name: str = "Structure"
     max_hp: float = 1
+    _hp: float = max_hp
     hp_regen: float = 0  # hp regeneration per second
     sturdiness: float = 0  # subtracts all kinetic damage by this value
     kinetic_factor: float = 1  # kinetic damage multiplier
     time_left_invulnerable: float = 0.
 
     def __post_init__(self):
-        self._hp: float = self.max_hp
+        pass
 
     @property
     def is_invulnerable(self):

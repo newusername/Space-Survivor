@@ -1,4 +1,5 @@
 """Defines the game world."""
+from typing import Optional
 import time
 
 from numpy.random import random
@@ -18,7 +19,7 @@ from model.systems.weapons import Railgun, TestShipRailgun
 class World:
     """Represents everything within the game world."""
 
-    def __init__(self, size: tuple[int, int], player: Player, entities: SpriteList = None):
+    def __init__(self, size: tuple[int, int], player: Player, entities: Optional[SpriteList] = None):
         """
         :params size: the size of the game world (width, height)
         """
@@ -35,9 +36,9 @@ class World:
         for wall in self.walls:
             self.physics_engine.add_sprite(wall, **WorldBorder.get_physics()) # todo check if the border cause collisions. (They touch, but dont overlap.)
 
-    def world_update(self):
+    def world_update(self, delta_time: float):
         """Is called during the simulation update. Is intended to handle world specific events."""
-        self.physics_engine.step()
+        self.physics_engine.step(delta_time)
 
     def add_entity(self, entity_class: type[PhysicalEntity], entity_parameters: dict) -> PhysicalEntity:
         """Create and add the entity to the world."""
@@ -110,9 +111,9 @@ class AstroidShowerWorld(World):
         for _ in range(num_initial_asteroids):
             self.spawn_asteroid()
 
-    def world_update(self):
+    def world_update(self, delta_time: float):
         """Remove asteroids that left the world bounds and spawn new ones."""
-        super().world_update()
+        super().world_update(delta_time)
 
         if time.perf_counter() - self._time_last_asteroid_spawned >= self.asteroid_spawn_interval:
             self.spawn_asteroid()

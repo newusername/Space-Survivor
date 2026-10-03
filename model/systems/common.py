@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum, auto
+from typing import TYPE_CHECKING
 
 from control.physics import PhysicsEngine
+
+if TYPE_CHECKING:
+    from model.entities import Combatant
 
 
 @dataclass
@@ -19,13 +25,13 @@ class System(ABC):
     :param entity: The Combatant entity the system belongs to.
     """
     name: str
-    entity: "Combatant"
+    entity: Combatant
     events: list[SystemEvent] = field(default_factory=list)
 
     @abstractmethod
     def activate(self, *args, **kwargs):
         """Activates the systems function. This is called every tick. The effects depend on the system."""
-        raise NotImplemented("abstract method")
+        raise NotImplementedError("abstract method")
 
     @property
     def physics_engine(self) -> PhysicsEngine:

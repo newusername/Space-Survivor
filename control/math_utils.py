@@ -1,4 +1,5 @@
 import math
+from typing import Sequence
 
 import numpy as np
 
@@ -60,7 +61,7 @@ def smallest_angle_difference(angle_1: float, angle_2: float) -> float:
     return (angle_2 - angle_1 + 180) % 360 - 180
 
 
-def polygon_area(points: tuple[float, float]):
+def polygon_area(points: Sequence[tuple[float, float]]):
     """Compute area of polygon using the shoelace formula.
        Points must be in order (clockwise or counterclockwise)."""
     n = len(points)

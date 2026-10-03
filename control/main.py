@@ -42,7 +42,7 @@ class GameControl:
     def simulation_tick(self):
         """Update the world."""
         self._handle_non_game_user_input()
-        self.world.world_update()
+        self.world.world_update(1 / self.simulation_speed)
         for entity in self.world.entities:
             if isinstance(entity, PhysicalEntity):
                 if entity.structure.hp == 0:

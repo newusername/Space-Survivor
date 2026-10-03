@@ -2,16 +2,17 @@
 import pyglet
 from pymunk import Vec2d
 
-pyglet.options.dpi_scaling = "real"  # this disable display scaling
+pyglet.options.dpi_scaling = "real"  # this disables display scaling
 
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 import arcade
+from arcade import Sprite, LRBT, Rect
+from arcade.types import Color
 import pygame
 import numpy as np
-from arcade import Sprite, LRBT, Rect
 from pygame.joystick import JoystickType
 
 from control.math_utils import get_point_angle
@@ -181,7 +182,7 @@ class GUI(arcade.Window):
         self.control.user_input.orientation = orientation
         self.control.user_input.orientation_strength = 1
 
-    def on_update(self, delta_time: float = None):
+    def on_update(self, delta_time: Optional[float] = None):
         """Notes:
 
         The sprites are automatically synced with the model by arcades Pymunk wrapper for the physics engine.
@@ -341,12 +342,12 @@ class GUI(arcade.Window):
         self.draw_bar(x, y, bar_width, max_bar_height, arcade.color.GREEN, energy_fraction)
 
     @staticmethod
-    def draw_bar(left: float, bottom: float, bar_width: float, max_bar_height: float, color: tuple[int, int, int],
+    def draw_bar(left: float, bottom: float, bar_width: float, max_bar_height: float, color: Color,
                  fraction: float = 1.):
         """Adds a simple depleted bar to the GUI."""
         current_height = max_bar_height * fraction
         arcade.draw_lbwh_rectangle_outline(left, bottom, bar_width, max_bar_height, arcade.color.BLACK, 2)
-        arcade.draw_lbwh_rectangle_filled(left, bottom, bar_width, current_height, color)
+        arcade.draw_lbwh_rectangle_filled(left, bottom, bar_width, current_height, color.rgb)
 
     def print_game_over(self):
         """Print the Game Over overlay."""

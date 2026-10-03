@@ -25,6 +25,11 @@ class Shields(System):
     def activate(self, *args, **kwargs):
         pass
 
+    @property
+    def shield_radius(self) -> float:
+        """The maximum distance the shield affects other objects from the center of the entity."""
+        return max(self.entity.size) / 2 + self.radius
+
 
 @dataclass(kw_only=True)
 class DeflectionShields(Shields):
@@ -68,11 +73,6 @@ class TestShipPhysicalDeflectionShields(DeflectionShields):
                 other_body.apply_force_at_local_point(force, (0, 0))  # todo would be more correct to apply the force at the contact point
 
         return False  # don't let sensor block movement
-
-    @property
-    def shield_radius(self):
-        """The maximum distance the shield affects other objects from the center of the entity."""
-        return max(self.entity.size) / 2 + self.radius
 
     def activate(self, *args, **kwargs):
         """Apply forces on all other objects within range of the shield to deflect them away from the ship."""

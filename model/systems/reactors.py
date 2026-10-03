@@ -70,9 +70,10 @@ class Reactor(System):
                 self.capacitors_limit = self.heavy_damage_multiplicator * self.max_capacitors_limit
                 self.capacitors_storage = self.heavy_damage_multiplicator * self.max_capacitors_storage
 
+
 @dataclass
 class TestShipReactor(Reactor):
     """For testing in debug mode."""
-    energy_production: float = 10
+    energy_production: float = 30
     capacitors_limit: float = 3000
     capacitors_storage: float = 3000
