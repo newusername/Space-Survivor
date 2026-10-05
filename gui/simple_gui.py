@@ -17,7 +17,7 @@ from pygame.joystick import JoystickType
 
 from control.math_utils import get_point_angle
 from gui.controller import ControllerMapping, ControllerInput, InputType
-from model.entities import Combatant, RailgunProjectile
+from model.entities import Combatant, RailgunProjectile, BlasterProjectile
 from model.worlds import World
 from control.main import GameControl
 from settings import GameSettings
@@ -89,6 +89,12 @@ class GUI(arcade.Window):
             shader_source = file.read()
             self.railgun_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
             self.railgun_shader.program['color'] = arcade.color.GOLD_FUSION.normalized[0:3]
+
+        file_name = "gui/shader/blaster.glsl"
+        with open(file_name) as file:
+            shader_source = file.read()
+            self.blaster_shader = arcade.experimental.Shadertoy(size=self.get_size(), main_source=shader_source)
+            self.blaster_shader.program['color'] = arcade.color.LIGHT_PINK.normalized[0:3]
 
     def _get_camera_view(self) -> Rect:
         """Return a rectangle that includes the area of the world currently in view."""
@@ -173,7 +179,7 @@ class GUI(arcade.Window):
         if button == arcade.MOUSE_BUTTON_LEFT:
             self.control.user_input.fire_rail_guns = True
         if button == arcade.MOUSE_BUTTON_RIGHT:
-            self.control.user_input.fire_lasers = True
+            self.control.user_input.fire_blasters = True
 
     def on_mouse_motion(self, x, y, dx, dy):
         """Event handler for mouse movements. Is called when the mouse moves over the window."""
@@ -224,6 +230,9 @@ class GUI(arcade.Window):
             # Move player (left stick)
             self.control.user_input.movement_width = self._get_axis_value(self.controller.left_stick_horizontal)
             self.control.user_input.movement_height = self._get_axis_value(self.controller.left_stick_vertical)
+
+            # weapons
+            self.control.user_input.fire_blasters = bool(self.joystick.get_button(self.controller.button_up.number))
 
             # Rotation (right stick)
             right_joystick_width = self._get_axis_value(self.controller.right_stick_horizontal)
@@ -300,6 +309,14 @@ class GUI(arcade.Window):
                 self.railgun_shader.program['pos_uv'] = self.camera_view.position_to_uv(sprite.position)
                 self.railgun_shader.program['size'] = self.camera.zoom * sprite.radius
                 self.railgun_shader.render()
+
+        # draw blasters
+        self._enable_transparency()
+        for sprite in self.sprite_list:
+            if isinstance(sprite, BlasterProjectile) and self._sprite_in_view(sprite):
+                self.blaster_shader.program['pos_uv'] = self.camera_view.position_to_uv(sprite.position)
+                self.blaster_shader.program['size'] = self.camera.zoom * sprite.radius
+                self.blaster_shader.render()
 
         # Draw sprites
         self.sprite_list.draw()

@@ -14,7 +14,7 @@ from model.systems.reactors import Reactor
 from model.systems.sensors import Sensor
 from model.systems.shields import Shields
 from model.systems.structures import Structure, AsteroidStructure
-from model.systems.weapons import Railgun
+from model.systems.weapons import Railgun, Blaster
 from settings import GameSettings
 
 
@@ -220,6 +220,7 @@ class Combatant(PhysicalEntity):
         self.reactor = Reactor(entity=self)
         self.engine = Engine(entity=self)
         self.railgun = Railgun(entity=self)
+        self.blaster = Blaster(entity=self)
         self.sensor = Sensor(entity=self)
         self.shields = Shields(entity=self)
 
@@ -239,6 +240,8 @@ class Combatant(PhysicalEntity):
             self.sensor = system_object
         elif issubclass(system, Shields):
             self.shields = system_object
+        elif issubclass(system, Blaster):
+            self.blaster = system_object
         else:
             raise ValueError(f"Unknown System class {type(system)}.")
 
@@ -269,4 +272,8 @@ class Projectile(PhysicalEntity):
 
 
 class RailgunProjectile(Projectile):
+    pass
+
+
+class BlasterProjectile(Projectile):
     pass

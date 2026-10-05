@@ -13,7 +13,7 @@ from model.systems.engines import TestShipEngine
 from model.systems.reactors import TestShipReactor
 from model.systems.shields import TestShipPhysicalDeflectionShields
 from model.systems.structures import TestShipChassis
-from model.systems.weapons import Railgun, TestShipRailgun
+from model.systems.weapons import Railgun, TestShipRailgun, Blaster
 
 
 class World:
@@ -143,7 +143,7 @@ class Multiverse:
 
         player = (Player(name="The Player", center_x=world_width // 2, center_y=world_height // 2)
                   .upgrade(TestShipEngine).upgrade(TestShipReactor).upgrade(TestShipChassis)
-                  .upgrade(TestShipPhysicalDeflectionShields).upgrade(TestShipRailgun))
+                  .upgrade(TestShipPhysicalDeflectionShields).upgrade(Blaster))
         world = World(size=(world_width, world_height), player=player)
         world.add_entity(Asteroid, dict(center_x=world_width // 2, center_y=world_height - 250, size=AsteroidSizes.big))
         return world
@@ -156,7 +156,7 @@ class Multiverse:
 
         player = (Player(name="The Player", center_x=world_width // 2, center_y=world_height // 2)
                   .upgrade(TestShipEngine).upgrade(TestShipReactor).upgrade(TestShipChassis)
-                  .upgrade(TestShipPhysicalDeflectionShields).upgrade(Railgun).upgrade(TestShipRailgun))
+                  .upgrade(TestShipPhysicalDeflectionShields).upgrade(Blaster))
         world = AstroidShowerWorld(size=(world_width, world_height), player=player, num_initial_asteroids=10,
                                    asteroid_spawn_interval=1)
         return world

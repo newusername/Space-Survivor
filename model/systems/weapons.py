@@ -9,6 +9,7 @@ from model.systems.common import System
 
 @dataclass(kw_only=True)
 class Railgun(System):
+    """Shoots differently sized projectiles with medium range and speed feared for their high kinetic energy."""
     name: str = "Railgun"
     power_consumption: float = 500.  # todo that should be the consequence of mass and speed.
     projectile_mass: float = 2.
@@ -46,8 +47,32 @@ class TestShipRailgun(Railgun):
 
 
 @dataclass(kw_only=True)
-class Lasers(System):
-    name: str = "Lasers"
+class Blaster(System):
+    name: str = "Blaster"
+    power_consumption: float = 100.
+    cool_down: float = 0.15
+    projectile_mass: float = 0.1
+    projectile_speed: float = 600.
+    damage_multiplier: float = 1.
+    _time_of_last_shot: float = 0.
 
-    def activate(self, *args, **kwargs):
-        raise NotImplemented
+    def activate(self, user_input: UserInput = None, *args, **kwargs):
+        if user_input is None or not user_input.fire_blasters or self._time_of_last_shot + self.cool_down > time.perf_counter():
+            if user_input:
+                user_input.fire_blasters = False
+            return None
+
+        if self.entity.reactor.power(self.power_consumption, self):
+            user_input.fire_blasters = False
+            self._time_of_last_shot = time.perf_counter()
+            translational_speed = Vec2d(x=0, y=1).rotated_degrees(-self.entity.angle) * self.projectile_speed
+            origin = self.entity.position + Vec2d(0, self.entity.size[0] / 2).rotated_degrees(-self.entity.angle)
+            return dict(
+                damage_multiplier=self.damage_multiplier,
+                center_x=origin.x, center_y=origin.y, angle=self.entity.angle,
+                scale=0.05,
+                mass=self.projectile_mass, translational_speed=translational_speed,
+                path_or_texture=":resources:/images/pinball/pool_cue_ball.png")
+
+        user_input.fire_blasters = False
+        return None

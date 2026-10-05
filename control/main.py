@@ -3,7 +3,7 @@
 import time
 
 from control.user_input import UserInput
-from model.entities import Combatant, RailgunProjectile, PhysicalEntity
+from model.entities import Combatant, RailgunProjectile, BlasterProjectile, PhysicalEntity
 from model.worlds import World
 from settings import GameSettings
 
@@ -59,6 +59,8 @@ class GameControl:
                 entity.shields.activate()
                 if shot_params := entity.railgun.activate(user_input=self.user_input):
                     self.world.add_entity(RailgunProjectile, shot_params)
+                if shot_params := entity.blaster.activate(user_input=self.user_input):
+                    self.world.add_entity(BlasterProjectile, shot_params)
 
     def _handle_non_game_user_input(self):
         """React to non-game related user input such as opening menus."""
